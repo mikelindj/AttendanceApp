@@ -70,9 +70,10 @@ const useStyles = makeStyles({
   controls: {
     display: 'flex',
     flexDirection: 'row',
-    gap: '12px',
+    gap: '8px', // Reduced gap to prevent overlap
     marginBottom: '16px',
     alignItems: 'flex-end',
+    flexWrap: 'nowrap', // Prevent wrapping
   },
   controlGroup: {
     display: 'flex',
@@ -81,14 +82,15 @@ const useStyles = makeStyles({
     flex: 1,
     minWidth: 0, // Allow flex items to shrink
     position: 'relative', // For z-index stacking
-    zIndex: 1, // Ensure dropdowns are above other content
+    zIndex: 100, // Higher z-index for the container
+    isolation: 'isolate', // Create new stacking context
   },
   dateControlGroup: {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
-    flex: '0 0 50%', // Fixed at 50% width, don't grow or shrink
-    maxWidth: '50%',
+    flex: '0 0 40%', // Reduced to 40% to prevent overlap with class dropdown
+    maxWidth: '40%',
     minWidth: 0,
   },
   studentList: {
@@ -222,24 +224,27 @@ const useStyles = makeStyles({
     padding: '24px',
   },
   dateInput: {
-    padding: '10px 12px',
+    padding: '8px 10px', // Reduced padding for more compact size
     borderRadius: tokens.borderRadiusMedium,
     border: `1px solid ${tokens.colorNeutralStroke1}`,
-    fontSize: '16px', // 16px prevents zoom on iOS
+    fontSize: '16px', // Keep 16px to prevent iOS zoom, but make field narrower
     fontFamily: 'inherit',
     width: '100%',
+    minHeight: '38px', // Consistent height with other inputs
+    backgroundColor: 'white',
+    boxSizing: 'border-box', // Ensure padding is included in width
     '&:focus': {
       outline: `2px solid ${tokens.colorBrandStroke1}`,
       outlineOffset: '2px',
     },
   },
   classSelect: {
-    padding: '10px 12px',
+    padding: '8px 10px', // Reduced padding to match date input
     borderRadius: tokens.borderRadiusMedium,
     border: `1px solid ${tokens.colorNeutralStroke1}`,
-    fontSize: '16px', // 16px prevents zoom on iOS
+    fontSize: '16px', // Keep 16px to prevent iOS zoom
     fontFamily: 'inherit',
-    minHeight: '42px', // Touch-friendly size
+    minHeight: '38px', // Consistent with date input
     width: '100%',
     backgroundColor: 'white',
     appearance: 'menulist', // Ensure native select appearance on mobile
@@ -247,7 +252,9 @@ const useStyles = makeStyles({
     MozAppearance: 'menulist', // Firefox
     cursor: 'pointer',
     position: 'relative',
-    zIndex: 1, // Ensure it's above other elements
+    zIndex: 9999, // Very high z-index to ensure it's above everything
+    touchAction: 'manipulation', // Improve touch handling on mobile
+    boxSizing: 'border-box', // Ensure padding is included in width
     '&:focus': {
       outline: `2px solid ${tokens.colorBrandStroke1}`,
       outlineOffset: '2px',
@@ -269,47 +276,52 @@ function Attendance() {
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // Will check on mount
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // Start as false, require auth
+  const [isInTeams, setIsInTeams] = useState(false); // Check if running in Teams
   const [userEmail, setUserEmail] = useState('');
+  const [authChecked, setAuthChecked] = useState(false); // Track if auth check is complete
 
-  // Get user principal name from Teams and check domain
+  // Check if running in Teams and get user authentication
   const checkAuthentication = async () => {
     try {
-      let userPrincipalName = '';
-      
-      // Check if running in Teams
-      if (window.microsoftTeams) {
-        try {
-          const context = await window.microsoftTeams.app.getContext();
-          userPrincipalName = context.user?.userPrincipalName || context.user?.loginHint || '';
-        } catch (err) {
-          console.warn('Could not get Teams context:', err);
-        }
-      }
-      
-      // If not in Teams, try to get from browser (for testing)
-      if (!userPrincipalName) {
-        // For development/testing - in production, this should come from Teams
-        // You might want to implement a proper auth flow here
-        userPrincipalName = localStorage.getItem('userEmail') || '';
+      // First, check if we're running in Teams
+      if (!window.microsoftTeams) {
+        setIsInTeams(false);
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+        return;
       }
 
-      // Check if user is from acsacademy.edu.sg domain
-      if (userPrincipalName && userPrincipalName.endsWith('@acsacademy.edu.sg')) {
+      // We're in Teams - mark as such
+      setIsInTeams(true);
+
+      // Get user context from Teams
+      let userPrincipalName = '';
+      try {
+        const context = await window.microsoftTeams.app.getContext();
+        userPrincipalName = context.user?.userPrincipalName || context.user?.loginHint || '';
+      } catch (err) {
+        console.error('Could not get Teams context:', err);
+        // If we can't get context, user might need to authenticate
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+        return;
+      }
+
+      // Require @acsacademy.edu.sg domain - strict check
+      if (userPrincipalName && userPrincipalName.toLowerCase().endsWith('@acsacademy.edu.sg')) {
         setIsAuthenticated(true);
         setUserEmail(userPrincipalName);
-      } else if (userPrincipalName) {
-        // User is logged in but wrong domain
-        setIsAuthenticated(false);
       } else {
-        // Not logged in - for Teams app, this should redirect to sign-in
-        // For now, we'll allow it (Teams handles auth)
-        setIsAuthenticated(true);
+        // User is not from required domain or not logged in
+        setIsAuthenticated(false);
+        setUserEmail(userPrincipalName || '');
       }
     } catch (err) {
       console.error('Auth check error:', err);
-      // Allow access for now - Teams will handle auth
-      setIsAuthenticated(true);
+      setIsAuthenticated(false);
+    } finally {
+      setAuthChecked(true);
     }
   };
 
@@ -669,7 +681,42 @@ function Attendance() {
     ? getClassName(classes.find(c => c.crd88_classesid === selectedClass))
     : '';
 
-  // Show authentication error
+  // Show loading state while checking authentication
+  if (!authChecked) {
+    return (
+      <FluentProvider theme={webLightTheme}>
+        <div className={styles.authContainer}>
+          <Card style={{ padding: '32px', maxWidth: '500px' }}>
+            <Spinner size="large" />
+            <Text style={{ marginTop: '16px', display: 'block', textAlign: 'center' }}>
+              Checking authentication...
+            </Text>
+          </Card>
+        </div>
+      </FluentProvider>
+    );
+  }
+
+  // Show error if not in Teams
+  if (!isInTeams) {
+    return (
+      <FluentProvider theme={webLightTheme}>
+        <div className={styles.authContainer}>
+          <Card style={{ padding: '32px', maxWidth: '500px' }}>
+            <Title1>Teams Required</Title1>
+            <Text style={{ marginTop: '16px', display: 'block' }}>
+              This application must be accessed through Microsoft Teams.
+            </Text>
+            <Text style={{ marginTop: '8px', display: 'block', opacity: 0.7 }}>
+              Please open this app from within the Teams desktop, web, or mobile app.
+            </Text>
+          </Card>
+        </div>
+      </FluentProvider>
+    );
+  }
+
+  // Show authentication error if wrong domain
   if (!isAuthenticated) {
     return (
       <FluentProvider theme={webLightTheme}>
@@ -679,21 +726,30 @@ function Attendance() {
             <Text style={{ marginTop: '16px', display: 'block' }}>
               You must be logged in with an @acsacademy.edu.sg account to access this application.
             </Text>
+            {userEmail && (
+              <Text style={{ marginTop: '8px', display: 'block', opacity: 0.7 }}>
+                Current account: {userEmail}
+              </Text>
+            )}
+            <Text style={{ marginTop: '16px', display: 'block', opacity: 0.7 }}>
+              Please sign in with an @acsacademy.edu.sg account in Teams.
+            </Text>
             <Button 
               appearance="primary" 
               style={{ marginTop: '24px' }}
-              onClick={() => {
-                // Redirect to sign-in - in Teams, this would be handled automatically
+              onClick={async () => {
+                // Try to re-check authentication
                 if (window.microsoftTeams) {
-                  window.microsoftTeams.authentication.authenticate({
-                    url: window.location.origin,
-                    width: 600,
-                    height: 535,
-                  });
+                  try {
+                    setAuthChecked(false);
+                    await checkAuthentication();
+                  } catch (err) {
+                    console.error('Re-authentication failed:', err);
+                  }
                 }
               }}
             >
-              Sign In
+              Retry Authentication
             </Button>
           </Card>
         </div>
@@ -733,7 +789,7 @@ function Attendance() {
         )}
 
         {/* Controls */}
-        <Card style={{ padding: '12px', marginBottom: '16px', marginLeft: '12px', marginRight: '12px' }}>
+        <Card style={{ padding: '12px', marginBottom: '16px', marginLeft: '12px', marginRight: '12px', overflow: 'visible', position: 'relative', zIndex: 50 }}>
           <div className={styles.controls}>
             <div className={styles.dateControlGroup}>
               <Label htmlFor="attendanceDate" required size="small" style={{ fontSize: '12px' }}>
@@ -754,17 +810,28 @@ function Attendance() {
               {loadingClasses ? (
                 <Spinner size="small" />
               ) : (
-                <div style={{ position: 'relative', zIndex: 10 }}>
+                <div style={{ position: 'relative', zIndex: 10000, isolation: 'isolate' }}>
                   <select
                     id="classDropdown"
                     value={selectedClass}
                     onChange={(e) => handleClassChange(e.target.value)}
+                    onClick={(e) => {
+                      // Prevent event bubbling that might interfere
+                      e.stopPropagation();
+                    }}
+                    onTouchStart={(e) => {
+                      // Ensure touch events work on mobile
+                      e.stopPropagation();
+                    }}
                     className={styles.classSelect}
                     style={{
                       width: '100%',
                       WebkitAppearance: 'menulist',
                       MozAppearance: 'menulist',
                       appearance: 'menulist',
+                      position: 'relative',
+                      zIndex: 10001,
+                      touchAction: 'manipulation',
                     }}
                   >
                     <option value="">Select a class...</option>
