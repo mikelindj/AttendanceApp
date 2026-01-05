@@ -10,7 +10,10 @@ const initTeams = () => {
       window.microsoftTeams.app.notifySuccess();
       console.log('✅ Teams SDK initialized');
     }).catch((error) => {
-      console.warn('⚠️ Teams SDK initialization failed:', error);
+      // Only log in development, suppress in production
+      if (import.meta.env.DEV) {
+        console.warn('⚠️ Teams SDK initialization failed (expected when running locally):', error.message);
+      }
     });
   }
 };

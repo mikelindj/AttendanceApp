@@ -1,0 +1,912 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  FluentProvider,
+  webLightTheme,
+  Button,
+  Card,
+  Spinner,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
+  makeStyles,
+  tokens,
+  Text,
+  Title1,
+  Label,
+  Field,
+  Select,
+  Option,
+  Dialog,
+  DialogSurface,
+  DialogTitle,
+  DialogBody,
+  DialogActions,
+  DialogContent,
+  Toaster,
+  useToastController,
+  Toast,
+  ToastTitle,
+  ToastBody,
+} from '@fluentui/react-components';
+import { Checkmark24Regular, Dismiss24Regular } from '@fluentui/react-icons';
+
+// API Base URL - points to parents.acsacademy.edu.sg
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://parents.acsacademy.edu.sg';
+
+// Attendance status options matching Dataverse choice values
+const ATTENDANCE_STATUSES = [
+  { value: 1000, label: 'Present' },
+  { value: 1001, label: 'Absent' },
+  { value: 1002, label: 'Late Arrival' },
+  { value: 1003, label: 'Early Dismissal' },
+];
+
+const DEFAULT_STATUS = 1000; // Present
+
+const useStyles = makeStyles({
+  container: {
+    maxWidth: '100%',
+    margin: '0 auto',
+    padding: '12px',
+    minHeight: '100vh',
+    paddingBottom: '100px', // Space for floating summary bar
+  },
+  header: {
+    marginBottom: '16px',
+    padding: '12px 16px',
+    backgroundColor: '#00205c',
+    borderRadius: 0,
+    color: 'white',
+  },
+  headerTitle: {
+    fontSize: '14px',
+    fontWeight: 400,
+    lineHeight: '1.2',
+    margin: 0,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  controls: {
+    display: 'flex',
+    flexDirection: 'row',
+    gap: '12px',
+    marginBottom: '16px',
+    alignItems: 'flex-end',
+  },
+  controlGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    flex: 1,
+    minWidth: 0, // Allow flex items to shrink
+  },
+  studentList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    maxHeight: 'calc(100vh - 300px)',
+    overflowY: 'auto',
+    overflowX: 'visible', // Allow dropdowns to overflow
+    padding: '4px',
+    position: 'relative', // For dropdown positioning
+  },
+  skeletonRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2,
+    gap: '16px',
+  },
+  skeletonText: {
+    height: '20px',
+    backgroundColor: tokens.colorNeutralStroke2,
+    borderRadius: tokens.borderRadiusSmall,
+    animation: 'pulse 1.5s ease-in-out infinite',
+  },
+  skeletonTextLarge: {
+    width: '150px',
+  },
+  skeletonTextSmall: {
+    width: '80px',
+  },
+  skeletonSelect: {
+    width: '180px',
+    height: '36px',
+    backgroundColor: tokens.colorNeutralStroke2,
+    borderRadius: tokens.borderRadiusMedium,
+    animation: 'pulse 1.5s ease-in-out infinite',
+  },
+  studentRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '12px 16px',
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusMedium,
+    transition: 'background-color 0.2s ease',
+    gap: '12px',
+    '&:hover': {
+      backgroundColor: tokens.colorNeutralBackground2,
+    },
+  },
+  studentHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 16px',
+    borderBottom: `2px solid ${tokens.colorNeutralStroke1}`,
+    marginBottom: '4px',
+    backgroundColor: tokens.colorNeutralBackground2,
+    gap: '12px',
+  },
+  studentRowChanged: {
+    backgroundColor: tokens.colorPaletteYellowBackground2,
+    borderLeft: `3px solid ${tokens.colorPaletteYellowBorderActive}`,
+  },
+  studentInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    flex: 1,
+  },
+  statusSelect: {
+    minWidth: '180px',
+  },
+  loadingContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '400px',
+  },
+  summaryBar: {
+    position: 'fixed',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: tokens.colorNeutralBackground1,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    padding: '12px 16px',
+    boxShadow: tokens.shadow16,
+    zIndex: 1000,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '12px',
+  },
+  summaryStats: {
+    display: 'flex',
+    gap: '16px',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    fontSize: '13px',
+  },
+  statItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  submitButton: {
+    minWidth: '160px',
+  },
+  authContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    gap: '16px',
+    padding: '24px',
+  },
+  dateInput: {
+    padding: '10px 12px',
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke1}`,
+    fontSize: '16px', // 16px prevents zoom on iOS
+    fontFamily: 'inherit',
+    width: '100%',
+    '&:focus': {
+      outline: `2px solid ${tokens.colorBrandStroke1}`,
+      outlineOffset: '2px',
+    },
+  },
+  classSelect: {
+    padding: '10px 12px',
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke1}`,
+    fontSize: '16px', // 16px prevents zoom on iOS
+    fontFamily: 'inherit',
+    minHeight: '42px', // Touch-friendly size
+    width: '100%',
+    '&:focus': {
+      outline: `2px solid ${tokens.colorBrandStroke1}`,
+      outlineOffset: '2px',
+    },
+  },
+});
+
+function Attendance() {
+  const styles = useStyles();
+  const { dispatchToast } = useToastController();
+  const [classes, setClasses] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [attendance, setAttendance] = useState({}); // { studentId: statusValue }
+  const [originalAttendance, setOriginalAttendance] = useState({}); // Track original state
+  const [selectedClass, setSelectedClass] = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loading, setLoading] = useState(false);
+  const [loadingClasses, setLoadingClasses] = useState(true);
+  const [error, setError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // Will check on mount
+  const [userEmail, setUserEmail] = useState('');
+
+  // Get user principal name from Teams and check domain
+  const checkAuthentication = async () => {
+    try {
+      let userPrincipalName = '';
+      
+      // Check if running in Teams
+      if (window.microsoftTeams) {
+        try {
+          const context = await window.microsoftTeams.app.getContext();
+          userPrincipalName = context.user?.userPrincipalName || context.user?.loginHint || '';
+        } catch (err) {
+          console.warn('Could not get Teams context:', err);
+        }
+      }
+      
+      // If not in Teams, try to get from browser (for testing)
+      if (!userPrincipalName) {
+        // For development/testing - in production, this should come from Teams
+        // You might want to implement a proper auth flow here
+        userPrincipalName = localStorage.getItem('userEmail') || '';
+      }
+
+      // Check if user is from acsacademy.edu.sg domain
+      if (userPrincipalName && userPrincipalName.endsWith('@acsacademy.edu.sg')) {
+        setIsAuthenticated(true);
+        setUserEmail(userPrincipalName);
+      } else if (userPrincipalName) {
+        // User is logged in but wrong domain
+        setIsAuthenticated(false);
+      } else {
+        // Not logged in - for Teams app, this should redirect to sign-in
+        // For now, we'll allow it (Teams handles auth)
+        setIsAuthenticated(true);
+      }
+    } catch (err) {
+      console.error('Auth check error:', err);
+      // Allow access for now - Teams will handle auth
+      setIsAuthenticated(true);
+    }
+  };
+
+
+  // Warn before leaving page with unsaved changes
+  useEffect(() => {
+    const checkUnsavedChanges = () => {
+      if (Object.keys(attendance).length === 0) return false;
+      return Object.keys(attendance).some((studentId) => {
+        return attendance[studentId] !== originalAttendance[studentId];
+      });
+    };
+
+    const handleBeforeUnload = (e) => {
+      if (checkUnsavedChanges()) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved attendance changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [attendance, originalAttendance]);
+
+  // Load classes on mount
+  useEffect(() => {
+    checkAuthentication();
+    loadClasses();
+  }, []);
+
+  // Load students and attendance when class or date changes
+  useEffect(() => {
+    if (selectedClass) {
+      loadStudents();
+    } else {
+      setStudents([]);
+      setAttendance({});
+      setOriginalAttendance({});
+    }
+  }, [selectedClass, selectedDate]);
+
+  // Load all classes
+  const loadClasses = async () => {
+    try {
+      setLoadingClasses(true);
+      setError(null);
+
+      const response = await fetch(`${API_BASE_URL}/api/attendanceGateway.php?action=classes`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (data.success && data.classes) {
+        setClasses(data.classes);
+        if (data.classes.length > 0 && !selectedClass) {
+          // Auto-select first class
+          const firstClassId = data.classes[0].crd88_classesid;
+          setSelectedClass(firstClassId);
+        }
+      } else {
+        throw new Error(data.error || 'Failed to load classes');
+      }
+    } catch (err) {
+      console.error('Error loading classes:', err);
+      setError(err.message);
+    } finally {
+      setLoadingClasses(false);
+    }
+  };
+
+  // Load students for selected class and existing attendance for selected date
+  const loadStudents = async () => {
+    if (!selectedClass) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch students in class
+      const studentsResponse = await fetch(
+        `${API_BASE_URL}/api/attendanceGateway.php?action=students&classId=${selectedClass}`,
+        {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        }
+      );
+
+      if (!studentsResponse.ok) {
+        throw new Error(`Error ${studentsResponse.status}: ${studentsResponse.statusText}`);
+      }
+
+      const studentsData = await studentsResponse.json();
+      if (!studentsData.success || !studentsData.students) {
+        throw new Error(studentsData.error || 'Failed to load students');
+      }
+
+      // Sort students by index number (crd88_indexnumber) in ascending order
+      const studentsList = studentsData.students.sort((a, b) => {
+        const indexA = parseInt(a.crd88_indexnumber) || 0;
+        const indexB = parseInt(b.crd88_indexnumber) || 0;
+        return indexA - indexB;
+      });
+      
+      setStudents(studentsList);
+
+      // Initialize attendance state with all students as Present (default)
+      const initialAttendance = {};
+      studentsList.forEach((student) => {
+        const studentId = student.new_studentsid;
+        initialAttendance[studentId] = DEFAULT_STATUS; // Default to Present
+      });
+
+      // Fetch existing attendance for the date
+      try {
+        const attendanceResponse = await fetch(
+          `${API_BASE_URL}/api/attendanceGateway.php?action=attendance&date=${selectedDate}&classId=${selectedClass}`,
+          {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+          }
+        );
+
+        if (attendanceResponse.ok) {
+          const attendanceData = await attendanceResponse.json();
+          if (attendanceData.success && attendanceData.attendance) {
+            // Map existing attendance records
+            attendanceData.attendance.forEach((record) => {
+              const studentId = record.studentId;
+              // Try multiple field names for status
+              const status = record.crd88_status ?? record.status ?? record.crd88_present ?? DEFAULT_STATUS;
+              if (studentId) {
+                // Ensure status is a valid number
+                const statusValue = typeof status === 'number' ? status : parseInt(status) || DEFAULT_STATUS;
+                initialAttendance[studentId] = statusValue;
+              }
+            });
+          }
+        } else if (attendanceResponse.status === 400) {
+          // 400 means no attendance records exist yet, which is fine
+          // Just use default values
+          console.log('No existing attendance records found for this date/class');
+        }
+      } catch (attendanceErr) {
+        console.warn('Could not load existing attendance:', attendanceErr);
+        // Continue with default values
+      }
+
+      setAttendance(initialAttendance);
+      setOriginalAttendance({ ...initialAttendance }); // Store original state
+    } catch (err) {
+      console.error('Error loading students:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update attendance status for a student
+  const updateAttendanceStatus = (studentId, statusValue) => {
+    setAttendance((prev) => ({
+      ...prev,
+      [studentId]: statusValue,
+    }));
+  };
+
+  // Check if a student's attendance has changed
+  const hasChanged = (studentId) => {
+    return attendance[studentId] !== originalAttendance[studentId];
+  };
+
+  // Calculate summary statistics
+  const getSummaryStats = () => {
+    const stats = {
+      present: 0,
+      absent: 0,
+      late: 0,
+      early: 0,
+    };
+
+    Object.values(attendance).forEach((status) => {
+      if (status === 1000) stats.present++;
+      else if (status === 1001) stats.absent++;
+      else if (status === 1002) stats.late++;
+      else if (status === 1003) stats.early++;
+    });
+
+    return stats;
+  };
+
+  // Check if there are any unsaved changes
+  const hasUnsavedChanges = () => {
+    if (Object.keys(attendance).length === 0) return false;
+    return Object.keys(attendance).some((studentId) => hasChanged(studentId));
+  };
+
+  // Handle date change with unsaved changes check
+  const handleDateChange = (newDate) => {
+    if (hasUnsavedChanges()) {
+      const confirmed = window.confirm(
+        'You have unsaved attendance changes. Are you sure you want to change the date?'
+      );
+      if (!confirmed) {
+        return; // Don't change the date
+      }
+    }
+    setSelectedDate(newDate);
+  };
+
+  // Handle class change with unsaved changes check
+  const handleClassChange = (newClassId) => {
+    if (hasUnsavedChanges()) {
+      const confirmed = window.confirm(
+        'You have unsaved attendance changes. Are you sure you want to change the class?'
+      );
+      if (!confirmed) {
+        return; // Don't change the class
+      }
+    }
+    setSelectedClass(newClassId);
+  };
+
+  // Get class name for display
+  const getClassName = (classItem) => {
+    return classItem.crd88_classid || `Class ${classItem.crd88_code || ''}`;
+  };
+
+  // Get student name for display
+  const getStudentName = (student) => {
+    return student.new_fullname || `Student ${student.crd88_indexnumber || ''}`;
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      day: 'numeric', 
+      month: 'short', 
+      year: 'numeric' 
+    });
+  };
+
+  // Handle submit button click
+  const handleSubmitClick = () => {
+    // Always allow submission if there are students
+    // The backend will handle creating/updating records as needed
+    if (students.length === 0) {
+      dispatchToast(
+        <Toast>
+          <ToastTitle>No Students</ToastTitle>
+          <ToastBody>No students to save attendance for.</ToastBody>
+        </Toast>,
+        { intent: 'info' }
+      );
+      return;
+    }
+    setShowConfirmDialog(true);
+  };
+
+  // Submit attendance
+  const submitAttendance = async () => {
+    setShowConfirmDialog(false);
+    
+    if (!selectedClass || !selectedDate) {
+      dispatchToast(
+        <Toast>
+          <ToastTitle>Error</ToastTitle>
+          <ToastBody>Please select a class and date</ToastBody>
+        </Toast>,
+        { intent: 'error' }
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Prepare attendance records
+      const records = students.map((student) => {
+        const studentId = student.new_studentsid;
+        const status = attendance[studentId] || DEFAULT_STATUS;
+        return {
+          studentId: studentId,
+          status: status, // Send status directly (1000=Present, 1001=Absent, 1002=Late, 1003=Early)
+        };
+      });
+
+      const response = await fetch(`${API_BASE_URL}/api/attendanceGateway.php?action=attendance`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          date: selectedDate,
+          classId: selectedClass,
+          records: records,
+          createdBy: userEmail,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Show success toast
+        dispatchToast(
+          <Toast>
+            <ToastTitle>Success</ToastTitle>
+            <ToastBody>Attendance saved successfully!</ToastBody>
+          </Toast>,
+          { intent: 'success' }
+        );
+
+        // Update original state to current state (clear unsaved changes)
+        setOriginalAttendance({ ...attendance });
+        
+        // Reload to show updated data
+        await loadStudents();
+      } else {
+        throw new Error(data.error || data.message || 'Failed to save attendance');
+      }
+    } catch (err) {
+      console.error('Error submitting attendance:', err);
+      dispatchToast(
+        <Toast>
+          <ToastTitle>Error</ToastTitle>
+          <ToastBody>{err.message || 'Failed to save attendance'}</ToastBody>
+        </Toast>,
+        { intent: 'error' }
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const stats = getSummaryStats();
+  const totalStudents = students.length;
+  const selectedClassName = classes.find(c => c.crd88_classesid === selectedClass) 
+    ? getClassName(classes.find(c => c.crd88_classesid === selectedClass))
+    : '';
+
+  // Show authentication error
+  if (!isAuthenticated) {
+    return (
+      <FluentProvider theme={webLightTheme}>
+        <div className={styles.authContainer}>
+          <Card style={{ padding: '32px', maxWidth: '500px' }}>
+            <Title1>Access Denied</Title1>
+            <Text style={{ marginTop: '16px', display: 'block' }}>
+              You must be logged in with an @acsacademy.edu.sg account to access this application.
+            </Text>
+            <Button 
+              appearance="primary" 
+              style={{ marginTop: '24px' }}
+              onClick={() => {
+                // Redirect to sign-in - in Teams, this would be handled automatically
+                if (window.microsoftTeams) {
+                  window.microsoftTeams.authentication.authenticate({
+                    url: window.location.origin,
+                    width: 600,
+                    height: 535,
+                  });
+                }
+              }}
+            >
+              Sign In
+            </Button>
+          </Card>
+        </div>
+      </FluentProvider>
+    );
+  }
+
+  return (
+    <FluentProvider theme={webLightTheme}>
+      <Toaster />
+      <div className={styles.container}>
+        {/* Header */}
+        <div className={styles.header}>
+          <Text className={styles.headerTitle} style={{ color: 'white' }}>
+            ACS (A) Attendance
+          </Text>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <MessageBar intent="error" style={{ marginBottom: '20px' }}>
+            <MessageBarTitle>Error</MessageBarTitle>
+            <MessageBarBody>
+              {error}
+              <Button
+                appearance="primary"
+                onClick={() => {
+                  loadClasses();
+                  if (selectedClass) loadStudents();
+                }}
+                style={{ marginLeft: '20px' }}
+              >
+                Retry
+              </Button>
+            </MessageBarBody>
+          </MessageBar>
+        )}
+
+        {/* Controls */}
+        <Card style={{ padding: '12px', marginBottom: '16px' }}>
+          <div className={styles.controls}>
+            <div className={styles.controlGroup}>
+              <Label htmlFor="attendanceDate" required size="small" style={{ fontSize: '12px' }}>
+                Date
+              </Label>
+              <input
+                id="attendanceDate"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className={styles.dateInput}
+              />
+            </div>
+            <div className={styles.controlGroup}>
+              <Label htmlFor="classDropdown" required size="small" style={{ fontSize: '12px' }}>
+                Class
+              </Label>
+              {loadingClasses ? (
+                <Spinner size="small" />
+              ) : (
+                <select
+                  id="classDropdown"
+                  value={selectedClass}
+                  onChange={(e) => handleClassChange(e.target.value)}
+                  className={styles.classSelect}
+                >
+                  <option value="">Select a class...</option>
+                  {classes.map((classItem) => {
+                    const classId = classItem.crd88_classesid;
+                    return (
+                      <option key={classId} value={classId}>
+                        {getClassName(classItem)}
+                      </option>
+                    );
+                  })}
+                </select>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Loading State with Skeleton */}
+        {loading && (
+          <Card style={{ padding: '20px' }}>
+            <Title1 size={500} style={{ marginBottom: '16px' }}>
+              Students
+            </Title1>
+            <div className={styles.studentList}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+                <div key={i} className={styles.skeletonRow}>
+                  <div className={styles.studentInfo} style={{ flex: 1 }}>
+                    <div className={`${styles.skeletonText} ${styles.skeletonTextLarge}`} />
+                    <div className={`${styles.skeletonText} ${styles.skeletonTextSmall}`} style={{ marginTop: '4px' }} />
+                  </div>
+                  <div className={styles.skeletonSelect} />
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* Student List */}
+        {!loading && selectedClass && students.length > 0 && (
+          <Card style={{ padding: '16px' }}>
+            <div className={styles.studentHeader}>
+              <Text size={300} weight="semibold" style={{ fontSize: '14px', flex: 1 }}>
+                Students ({totalStudents})
+              </Text>
+              <Text size={300} weight="semibold" style={{ fontSize: '14px', width: '120px', textAlign: 'right' }}>
+                Status
+              </Text>
+            </div>
+            <div className={styles.studentList}>
+              {students.map((student) => {
+                const studentId = student.new_studentsid;
+                const currentStatus = attendance[studentId] ?? DEFAULT_STATUS;
+                const changed = hasChanged(studentId);
+                const studentNumber = student.crd88_indexnumber;
+
+                return (
+                  <div
+                    key={studentId}
+                    className={`${styles.studentRow} ${changed ? styles.studentRowChanged : ''}`}
+                  >
+                    <div className={styles.studentInfo}>
+                      <Text weight="semibold">{getStudentName(student)}</Text>
+                      {studentNumber && (
+                        <Text size={200} style={{ opacity: 0.7 }}>
+                          #{studentNumber}
+                        </Text>
+                      )}
+                    </div>
+                    <div style={{ width: '120px', flexShrink: 0 }}>
+                      <select
+                        value={currentStatus.toString()}
+                        onChange={(e) => {
+                          updateAttendanceStatus(studentId, parseInt(e.target.value));
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 10px',
+                          borderRadius: tokens.borderRadiusMedium,
+                          border: `1px solid ${tokens.colorNeutralStroke1}`,
+                          fontSize: '14px',
+                          fontFamily: 'inherit',
+                          minHeight: '38px',
+                          backgroundColor: 'white',
+                        }}
+                      >
+                        {ATTENDANCE_STATUSES.map((status) => (
+                          <option key={status.value} value={status.value.toString()}>
+                            {status.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
+        {/* Empty State */}
+        {!loading && selectedClass && students.length === 0 && (
+          <Card style={{ padding: '20px' }}>
+            <Text>No students found for this class.</Text>
+          </Card>
+        )}
+
+        {!loading && !selectedClass && (
+          <Card style={{ padding: '20px' }}>
+            <Text>Please select a class to view students.</Text>
+          </Card>
+        )}
+
+        {/* Floating Summary Bar */}
+        {!loading && selectedClass && students.length > 0 && (
+          <div className={styles.summaryBar}>
+            <div className={styles.summaryStats}>
+              <div className={styles.statItem}>
+                <Text weight="semibold">{stats.present}</Text>
+                <Text>Present</Text>
+              </div>
+              <div className={styles.statItem}>
+                <Text weight="semibold">{stats.absent}</Text>
+                <Text>Absent</Text>
+              </div>
+              <div className={styles.statItem}>
+                <Text weight="semibold">{stats.late}</Text>
+                <Text>Late Arrival</Text>
+              </div>
+              <div className={styles.statItem}>
+                <Text weight="semibold">{stats.early}</Text>
+                <Text>Early Dismissal</Text>
+              </div>
+            </div>
+            <Button
+              appearance="primary"
+              onClick={handleSubmitClick}
+              disabled={isSubmitting}
+              className={styles.submitButton}
+            >
+              {isSubmitting ? 'Saving...' : 'Submit Attendance'}
+            </Button>
+          </div>
+        )}
+
+        {/* Confirmation Dialog */}
+        <Dialog open={showConfirmDialog} onOpenChange={(_, data) => setShowConfirmDialog(data.open)}>
+          <DialogSurface>
+            <DialogBody>
+              <DialogTitle>Confirm Attendance</DialogTitle>
+              <DialogContent>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                  <Text>
+                    <strong>Class:</strong> {selectedClassName}
+                  </Text>
+                  <Text>
+                    <strong>Date:</strong> {formatDate(selectedDate)}
+                  </Text>
+                  <Text style={{ marginTop: '8px' }}>
+                    You are about to save/update <strong>{totalStudents}</strong> records.
+                  </Text>
+                </div>
+              </DialogContent>
+              <DialogActions>
+                <Button
+                  appearance="secondary"
+                  onClick={() => setShowConfirmDialog(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  appearance="primary"
+                  onClick={submitAttendance}
+                  disabled={isSubmitting}
+                >
+                  Confirm & Save
+                </Button>
+              </DialogActions>
+            </DialogBody>
+          </DialogSurface>
+        </Dialog>
+      </div>
+    </FluentProvider>
+  );
+}
+
+export default Attendance;

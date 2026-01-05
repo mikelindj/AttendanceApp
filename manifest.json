@@ -27,8 +27,8 @@
     {
       "entityId": "main",
       "name": "Main",
-      "contentUrl": "https://your-app-url.azurestaticapps.net/index.html",
-      "websiteUrl": "https://your-app-url.azurestaticapps.net/index.html",
+      "contentUrl": "https://ambitious-rock-0f3c0f100.1.azurestaticapps.net/index.html",
+      "websiteUrl": "https://ambitious-rock-0f3c0f100.1.azurestaticapps.net/index.html",
       "scopes": ["personal"]
     }
   ],
@@ -38,11 +38,11 @@
   "validDomains": [
     "*.azurestaticapps.net",
     "*.netlify.app",
-    "yourcompany.com"
+    "parents.acsacademy.edu.sg"
   ],
   "webApplicationInfo": {
     "id": "00000000-0000-0000-0000-000000000000",
-    "resource": "api://your-app-url.azurestaticapps.net/00000000-0000-0000-0000-000000000000"
+    "resource": "api://ambitious-rock-0f3c0f100.1.azurestaticapps.net/00000000-0000-0000-0000-000000000000"
   }
 }
 
