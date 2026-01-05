@@ -27,10 +27,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // ============================================================================
 // These should be set as environment variables on your server
 // For local development, you can set them in your .env file or server config
-$CLIENT_ID = getenv('AZURE_CLIENT_ID') ?: 'REPLACED_WITH_ENV_VAR';
-$CLIENT_SECRET = getenv('AZURE_CLIENT_SECRET') ?: 'REPLACED_WITH_ENV_VAR';
-$TENANT_ID = getenv('AZURE_TENANT_ID') ?: 'REPLACED_WITH_ENV_VAR';
-$DATAVERSE_URL = getenv('DATAVERSE_URL') ?: 'https://acsa.crm5.dynamics.com';
+$CLIENT_ID = getenv('AZURE_CLIENT_ID');
+$CLIENT_SECRET = getenv('AZURE_CLIENT_SECRET');
+$TENANT_ID = getenv('AZURE_TENANT_ID');
+$DATAVERSE_URL = getenv('DATAVERSE_URL');
 
 // ============================================================================
 // DATAVERSE TABLE NAMES - Updated to match your Dataverse schema
@@ -71,12 +71,10 @@ $STUDENT_NUMBER_FIELD = 'crd88_indexnumber';    // Student number/index (from sa
 $STUDENT_CLASS_FIELD = 'crd88_class';           // Class lookup field logical name (from sample: _crd88_class_value)
 
 // Validate configuration
-if (empty($CLIENT_ID) || $CLIENT_ID === 'YOUR_AZURE_CLIENT_ID_HERE' ||
-    empty($CLIENT_SECRET) || $CLIENT_SECRET === 'YOUR_AZURE_CLIENT_SECRET_HERE' ||
-    empty($TENANT_ID) || $TENANT_ID === 'YOUR_AZURE_TENANT_ID_HERE') {
+if (empty($CLIENT_ID) || empty($CLIENT_SECRET) || empty($TENANT_ID)) {
     http_response_code(500);
     echo json_encode([
-        'error' => 'Azure AD configuration missing. Please update CLIENT_ID, CLIENT_SECRET, and TENANT_ID in attendanceGateway.php'
+        'error' => 'Azure AD configuration missing. Please set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, and AZURE_TENANT_ID environment variables on your server.'
     ]);
     exit;
 }
