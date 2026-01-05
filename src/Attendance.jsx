@@ -80,6 +80,8 @@ const useStyles = makeStyles({
     gap: '6px',
     flex: 1,
     minWidth: 0, // Allow flex items to shrink
+    position: 'relative', // For z-index stacking
+    zIndex: 1, // Ensure dropdowns are above other content
   },
   dateControlGroup: {
     display: 'flex',
@@ -239,6 +241,13 @@ const useStyles = makeStyles({
     fontFamily: 'inherit',
     minHeight: '42px', // Touch-friendly size
     width: '100%',
+    backgroundColor: 'white',
+    appearance: 'menulist', // Ensure native select appearance on mobile
+    WebkitAppearance: 'menulist', // iOS Safari
+    MozAppearance: 'menulist', // Firefox
+    cursor: 'pointer',
+    position: 'relative',
+    zIndex: 1, // Ensure it's above other elements
     '&:focus': {
       outline: `2px solid ${tokens.colorBrandStroke1}`,
       outlineOffset: '2px',
@@ -745,22 +754,30 @@ function Attendance() {
               {loadingClasses ? (
                 <Spinner size="small" />
               ) : (
-                <select
-                  id="classDropdown"
-                  value={selectedClass}
-                  onChange={(e) => handleClassChange(e.target.value)}
-                  className={styles.classSelect}
-                >
-                  <option value="">Select a class...</option>
-                  {classes.map((classItem) => {
-                    const classId = classItem.crd88_classesid;
-                    return (
-                      <option key={classId} value={classId}>
-                        {getClassName(classItem)}
-                      </option>
-                    );
-                  })}
-                </select>
+                <div style={{ position: 'relative', zIndex: 10 }}>
+                  <select
+                    id="classDropdown"
+                    value={selectedClass}
+                    onChange={(e) => handleClassChange(e.target.value)}
+                    className={styles.classSelect}
+                    style={{
+                      width: '100%',
+                      WebkitAppearance: 'menulist',
+                      MozAppearance: 'menulist',
+                      appearance: 'menulist',
+                    }}
+                  >
+                    <option value="">Select a class...</option>
+                    {classes.map((classItem) => {
+                      const classId = classItem.crd88_classesid;
+                      return (
+                        <option key={classId} value={classId}>
+                          {getClassName(classItem)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               )}
             </div>
           </div>

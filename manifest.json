@@ -2,13 +2,13 @@
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
   "manifestVersion": "1.16",
   "version": "1.0.0",
-  "id": "00000000-0000-0000-0000-000000000000",
-  "packageName": "com.yourcompany.newteamsapp",
+  "id": "73fe7f13-c00e-4e7c-82b7-8c62cb3519ad",
+  "packageName": "sg.edu.acsacademy.tech",
   "developer": {
     "name": "Your Company",
-    "websiteUrl": "https://yourcompany.com",
-    "privacyUrl": "https://yourcompany.com/privacy",
-    "termsOfUseUrl": "https://yourcompany.com/terms"
+    "websiteUrl": "https://acsacademy.edu.sg",
+    "privacyUrl": "https://acsacademy.edu.sg/privacy",
+    "termsOfUseUrl": "https://acsacademy.edu.sg/terms"
   },
   "name": {
     "short": "Attendance - ACS(A)",
@@ -41,8 +41,8 @@
     "parents.acsacademy.edu.sg"
   ],
   "webApplicationInfo": {
-    "id": "00000000-0000-0000-0000-000000000000",
-    "resource": "api://lemon-meadow-03d34c000.6.azurestaticapps.net/00000000-0000-0000-0000-000000000000"
+    "id": "73fe7f13-c00e-4e7c-82b7-8c62cb3519ad",
+    "resource": "api://lemon-meadow-03d34c000.6.azurestaticapps.net/73fe7f13-c00e-4e7c-82b7-8c62cb3519ad"
   }
 }
 
