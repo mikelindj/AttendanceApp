@@ -27,8 +27,8 @@
     {
       "entityId": "main",
       "name": "Main",
-      "contentUrl": "https://ambitious-rock-0f3c0f100.1.azurestaticapps.net/index.html",
-      "websiteUrl": "https://ambitious-rock-0f3c0f100.1.azurestaticapps.net/index.html",
+      "contentUrl": "https://lemon-meadow-03d34c000.6.azurestaticapps.net/index.html",
+      "websiteUrl": "https://lemon-meadow-03d34c000.6.azurestaticapps.net/index.html",
       "scopes": ["personal"]
     }
   ],
@@ -42,7 +42,7 @@
   ],
   "webApplicationInfo": {
     "id": "00000000-0000-0000-0000-000000000000",
-    "resource": "api://ambitious-rock-0f3c0f100.1.azurestaticapps.net/00000000-0000-0000-0000-000000000000"
+    "resource": "api://lemon-meadow-03d34c000.6.azurestaticapps.net/00000000-0000-0000-0000-000000000000"
   }
 }
 
