@@ -10,6 +10,8 @@ teams-app-package/
 .env
 .env.local
 .env.production
+api/.env
+api/.env.*
 
 # IDE
 .vscode/

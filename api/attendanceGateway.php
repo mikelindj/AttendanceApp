@@ -23,12 +23,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // ============================================================================
-// AZURE AD CONFIGURATION - REPLACE WITH YOUR ACTUAL VALUES
+// AZURE AD CONFIGURATION - Load from environment variables
 // ============================================================================
-$CLIENT_ID = getenv('AZURE_CLIENT_ID');
-$CLIENT_SECRET = getenv('AZURE_CLIENT_SECRET');
-$TENANT_ID = getenv('AZURE_TENANT_ID');
-$DATAVERSE_URL = 'https://acsa.crm5.dynamics.com';
+// These should be set as environment variables on your server
+// For local development, you can set them in your .env file or server config
+$CLIENT_ID = getenv('AZURE_CLIENT_ID') ?: 'REPLACED_WITH_ENV_VAR';
+$CLIENT_SECRET = getenv('AZURE_CLIENT_SECRET') ?: 'REPLACED_WITH_ENV_VAR';
+$TENANT_ID = getenv('AZURE_TENANT_ID') ?: 'REPLACED_WITH_ENV_VAR';
+$DATAVERSE_URL = getenv('DATAVERSE_URL') ?: 'https://acsa.crm5.dynamics.com';
 
 // ============================================================================
 // DATAVERSE TABLE NAMES - Updated to match your Dataverse schema

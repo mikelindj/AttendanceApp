@@ -47,9 +47,9 @@ const useStyles = makeStyles({
   container: {
     maxWidth: '100%',
     margin: '0 auto',
-    padding: '12px',
+    padding: '12px 0', // Only vertical padding, no horizontal padding to maximize width
     minHeight: '100vh',
-    paddingBottom: '100px', // Space for floating summary bar
+    paddingBottom: '80px', // Space for fixed footer (reduced since no internal scrolling)
   },
   header: {
     marginBottom: '16px',
@@ -81,13 +81,19 @@ const useStyles = makeStyles({
     flex: 1,
     minWidth: 0, // Allow flex items to shrink
   },
+  dateControlGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    flex: '0 0 50%', // Fixed at 50% width, don't grow or shrink
+    maxWidth: '50%',
+    minWidth: 0,
+  },
   studentList: {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    maxHeight: 'calc(100vh - 300px)',
-    overflowY: 'auto',
-    overflowX: 'visible', // Allow dropdowns to overflow
+    // Removed maxHeight and overflowY to allow natural page scrolling
     padding: '4px',
     position: 'relative', // For dropdown positioning
   },
@@ -123,7 +129,7 @@ const useStyles = makeStyles({
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 16px',
+    padding: '12px', // Reduced horizontal padding to maximize width
     borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     borderRadius: tokens.borderRadiusMedium,
     transition: 'background-color 0.2s ease',
@@ -168,29 +174,41 @@ const useStyles = makeStyles({
     right: 0,
     backgroundColor: tokens.colorNeutralBackground1,
     borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
-    padding: '12px 16px',
+    padding: '10px 12px',
     boxShadow: tokens.shadow16,
     zIndex: 1000,
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '12px',
+    flexWrap: 'nowrap', // Prevent wrapping
+    gap: '8px',
+    overflow: 'hidden', // Prevent overflow
+    // Height calculation for padding bottom
+    height: 'auto',
+    minHeight: '60px',
   },
   summaryStats: {
     display: 'flex',
-    gap: '16px',
-    flexWrap: 'wrap',
+    gap: '8px',
+    flexWrap: 'nowrap', // Prevent wrapping
     alignItems: 'center',
-    fontSize: '13px',
+    fontSize: '12px',
+    whiteSpace: 'nowrap', // Prevent text wrapping
+    overflow: 'hidden',
+    flex: '1 1 auto',
+    minWidth: 0, // Allow shrinking
   },
   statItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '4px',
+    whiteSpace: 'nowrap',
+    flexShrink: 0, // Don't shrink individual items
   },
   submitButton: {
-    minWidth: '160px',
+    minWidth: '140px',
+    flexShrink: 0, // Don't shrink button
+    whiteSpace: 'nowrap',
   },
   authContainer: {
     display: 'flex',
@@ -310,6 +328,11 @@ function Attendance() {
     };
   }, [attendance, originalAttendance]);
 
+  // Get class name for display (defined early so it can be used in loadClasses)
+  const getClassName = (classItem) => {
+    return classItem.crd88_classid || `Class ${classItem.crd88_code || ''}`;
+  };
+
   // Load classes on mount
   useEffect(() => {
     checkAuthentication();
@@ -346,10 +369,16 @@ function Attendance() {
 
       const data = await response.json();
       if (data.success && data.classes) {
-        setClasses(data.classes);
-        if (data.classes.length > 0 && !selectedClass) {
-          // Auto-select first class
-          const firstClassId = data.classes[0].crd88_classesid;
+        // Sort classes in descending alphabetical order by class name
+        const sortedClasses = [...data.classes].sort((a, b) => {
+          const nameA = getClassName(a).toLowerCase();
+          const nameB = getClassName(b).toLowerCase();
+          return nameB.localeCompare(nameA); // Descending order (Z to A)
+        });
+        setClasses(sortedClasses);
+        if (sortedClasses.length > 0 && !selectedClass) {
+          // Auto-select first class (now the last alphabetically)
+          const firstClassId = sortedClasses[0].crd88_classesid;
           setSelectedClass(firstClassId);
         }
       } else {
@@ -518,10 +547,6 @@ function Attendance() {
     setSelectedClass(newClassId);
   };
 
-  // Get class name for display
-  const getClassName = (classItem) => {
-    return classItem.crd88_classid || `Class ${classItem.crd88_code || ''}`;
-  };
 
   // Get student name for display
   const getStudentName = (student) => {
@@ -699,9 +724,9 @@ function Attendance() {
         )}
 
         {/* Controls */}
-        <Card style={{ padding: '12px', marginBottom: '16px' }}>
+        <Card style={{ padding: '12px', marginBottom: '16px', marginLeft: '12px', marginRight: '12px' }}>
           <div className={styles.controls}>
-            <div className={styles.controlGroup}>
+            <div className={styles.dateControlGroup}>
               <Label htmlFor="attendanceDate" required size="small" style={{ fontSize: '12px' }}>
                 Date
               </Label>
@@ -743,7 +768,7 @@ function Attendance() {
 
         {/* Loading State with Skeleton */}
         {loading && (
-          <Card style={{ padding: '20px' }}>
+          <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
             <Title1 size={500} style={{ marginBottom: '16px' }}>
               Students
             </Title1>
@@ -763,7 +788,7 @@ function Attendance() {
 
         {/* Student List */}
         {!loading && selectedClass && students.length > 0 && (
-          <Card style={{ padding: '16px' }}>
+          <div>
             <div className={styles.studentHeader}>
               <Text size={300} weight="semibold" style={{ fontSize: '14px', flex: 1 }}>
                 Students ({totalStudents})
@@ -820,18 +845,18 @@ function Attendance() {
                 );
               })}
             </div>
-          </Card>
+          </div>
         )}
 
         {/* Empty State */}
         {!loading && selectedClass && students.length === 0 && (
-          <Card style={{ padding: '20px' }}>
+          <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
             <Text>No students found for this class.</Text>
           </Card>
         )}
 
         {!loading && !selectedClass && (
-          <Card style={{ padding: '20px' }}>
+          <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
             <Text>Please select a class to view students.</Text>
           </Card>
         )}
@@ -841,20 +866,23 @@ function Attendance() {
           <div className={styles.summaryBar}>
             <div className={styles.summaryStats}>
               <div className={styles.statItem}>
-                <Text weight="semibold">{stats.present}</Text>
-                <Text>Present</Text>
+                <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.present}</Text>
+                <Text style={{ fontSize: '12px' }}>Present</Text>
               </div>
+              <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
               <div className={styles.statItem}>
-                <Text weight="semibold">{stats.absent}</Text>
-                <Text>Absent</Text>
+                <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.absent}</Text>
+                <Text style={{ fontSize: '12px' }}>Absent</Text>
               </div>
+              <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
               <div className={styles.statItem}>
-                <Text weight="semibold">{stats.late}</Text>
-                <Text>Late Arrival</Text>
+                <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.late}</Text>
+                <Text style={{ fontSize: '12px' }}>Late</Text>
               </div>
+              <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
               <div className={styles.statItem}>
-                <Text weight="semibold">{stats.early}</Text>
-                <Text>Early Dismissal</Text>
+                <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.early}</Text>
+                <Text style={{ fontSize: '12px' }}>Early</Text>
               </div>
             </div>
             <Button
