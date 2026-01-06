@@ -325,7 +325,9 @@ function Attendance() {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({}); // { studentId: statusValue }
+  const [remarks, setRemarks] = useState({}); // { studentId: remarksText }
   const [originalAttendance, setOriginalAttendance] = useState({}); // Track original state
+  const [originalRemarks, setOriginalRemarks] = useState({}); // Track original remarks state
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(false);
@@ -613,9 +615,11 @@ function Attendance() {
 
       // Initialize attendance state with all students as Present (default)
       const initialAttendance = {};
+      const initialRemarks = {};
       studentsList.forEach((student) => {
         const studentId = student.new_studentsid;
         initialAttendance[studentId] = DEFAULT_STATUS; // Default to Present
+        initialRemarks[studentId] = ''; // Default to empty remarks
       });
 
       // Fetch existing attendance for the date
@@ -642,6 +646,9 @@ function Attendance() {
                 // Ensure status is a valid number
                 const statusValue = typeof status === 'number' ? status : parseInt(status) || DEFAULT_STATUS;
                 initialAttendance[studentId] = statusValue;
+                // Load remarks if present
+                const remarksText = record.crd88_remarks ?? record.remarks ?? '';
+                initialRemarks[studentId] = remarksText || '';
               }
             });
           }
@@ -656,7 +663,9 @@ function Attendance() {
       }
 
       setAttendance(initialAttendance);
+      setRemarks(initialRemarks);
       setOriginalAttendance({ ...initialAttendance }); // Store original state
+      setOriginalRemarks({ ...initialRemarks }); // Store original remarks state
     } catch (err) {
       console.error('Error loading students:', err);
       setError(err.message);
@@ -671,11 +680,28 @@ function Attendance() {
       ...prev,
       [studentId]: statusValue,
     }));
+    // Clear remarks if status changes to Present
+    if (statusValue === 1000) {
+      setRemarks((prev) => ({
+        ...prev,
+        [studentId]: '',
+      }));
+    }
+  };
+
+  // Update remarks for a student
+  const updateRemarks = (studentId, remarksText) => {
+    setRemarks((prev) => ({
+      ...prev,
+      [studentId]: remarksText,
+    }));
   };
 
   // Check if a student's attendance has changed
   const hasChanged = (studentId) => {
-    return attendance[studentId] !== originalAttendance[studentId];
+    const statusChanged = attendance[studentId] !== originalAttendance[studentId];
+    const remarksChanged = (remarks[studentId] || '') !== (originalRemarks[studentId] || '');
+    return statusChanged || remarksChanged;
   };
 
   // Calculate summary statistics (excluding excluded student)
@@ -788,9 +814,11 @@ function Attendance() {
         .map((student) => {
           const studentId = student.new_studentsid;
           const status = attendance[studentId] || DEFAULT_STATUS;
+          const remarksText = remarks[studentId] || '';
           return {
             studentId: studentId,
             status: status, // Send status directly (1000=Present, 1001=Absent, 1002=Late, 1003=Early)
+            remarks: remarksText, // Include remarks
           };
         });
 
@@ -821,6 +849,7 @@ function Attendance() {
 
         // Update original state to current state (clear unsaved changes)
         setOriginalAttendance({ ...attendance });
+        setOriginalRemarks({ ...remarks });
         
         // Reload to show updated data
         await loadStudents();
@@ -1166,43 +1195,72 @@ function Attendance() {
                 const changed = hasChanged(studentId);
                 const studentNumber = student.crd88_indexnumber;
 
+                const currentRemarks = remarks[studentId] || '';
+                const showRemarks = currentStatus !== 1000; // Show remarks if not Present
+
                 return (
                   <div
                     key={studentId}
                     className={`${styles.studentRow} ${changed ? styles.studentRowChanged : ''}`}
+                    style={{ flexDirection: 'column', alignItems: 'stretch' }}
                   >
-                    <div className={styles.studentInfo}>
-                      <Text weight="semibold">{getStudentName(student)}</Text>
-                      {studentNumber && (
-                        <Text size={200} style={{ opacity: 0.7 }}>
-                          #{studentNumber}
-                        </Text>
-                      )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                      <div className={styles.studentInfo}>
+                        <Text weight="semibold">{getStudentName(student)}</Text>
+                        {studentNumber && (
+                          <Text size={200} style={{ opacity: 0.7 }}>
+                            #{studentNumber}
+                          </Text>
+                        )}
+                      </div>
+                      <div style={{ width: '120px', flexShrink: 0 }}>
+                        <select
+                          value={currentStatus.toString()}
+                          onChange={(e) => {
+                            updateAttendanceStatus(studentId, parseInt(e.target.value));
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px 10px',
+                            borderRadius: tokens.borderRadiusMedium,
+                            border: `1px solid ${tokens.colorNeutralStroke1}`,
+                            fontSize: '14px',
+                            fontFamily: 'inherit',
+                            minHeight: '38px',
+                            backgroundColor: 'white',
+                          }}
+                        >
+                          {ATTENDANCE_STATUSES.map((status) => (
+                            <option key={status.value} value={status.value.toString()}>
+                              {status.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div style={{ width: '120px', flexShrink: 0 }}>
-                      <select
-                        value={currentStatus.toString()}
-                        onChange={(e) => {
-                          updateAttendanceStatus(studentId, parseInt(e.target.value));
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '8px 10px',
-                          borderRadius: tokens.borderRadiusMedium,
-                          border: `1px solid ${tokens.colorNeutralStroke1}`,
-                          fontSize: '14px',
-                          fontFamily: 'inherit',
-                          minHeight: '38px',
-                          backgroundColor: 'white',
-                        }}
-                      >
-                        {ATTENDANCE_STATUSES.map((status) => (
-                          <option key={status.value} value={status.value.toString()}>
-                            {status.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {showRemarks && (
+                      <div style={{ marginTop: '8px', width: '100%' }}>
+                        <input
+                          type="text"
+                          placeholder="Enter remarks..."
+                          value={currentRemarks}
+                          onChange={(e) => {
+                            updateRemarks(studentId, e.target.value);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: tokens.borderRadiusMedium,
+                            border: `1px solid ${tokens.colorNeutralStroke1}`,
+                            fontSize: '14px',
+                            fontFamily: 'inherit',
+                            minHeight: '38px',
+                            backgroundColor: 'white',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}

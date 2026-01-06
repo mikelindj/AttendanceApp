@@ -50,6 +50,7 @@ $ATTENDANCE_TABLE_LOGICAL = 'crd88_attendance'; // LogicalName (use in @odata.bi
 $ATTENDANCE_ID_FIELD = 'crd88_attendanceid';      // Primary key
 $ATTENDANCE_DATE_FIELD = 'crd88_date';            // Date field
 $ATTENDANCE_PRESENT_FIELD = 'crd88_status';       // Status choice field: 1000=Present, 1001=Absent, 1002=Late Arrival, 1003=Early Dismissal
+$ATTENDANCE_REMARKS_FIELD = 'crd88_remarks';      // Remarks text field
 // Lookup field logical names (confirmed from Dataverse metadata)
 // Note: Navigation property names are case-sensitive!
 $ATTENDANCE_STUDENT_FIELD = 'crd88_new_students'; // Lookup field logical name (for filtering)
@@ -254,7 +255,7 @@ try {
                 // Include lookup value fields to extract student ID
                 // Only select actual fields, not lookup field logical names
                 // Use _value field for lookup, not the logical name
-                $select = urlencode("{$ATTENDANCE_ID_FIELD},{$ATTENDANCE_PRESENT_FIELD},{$ATTENDANCE_DATE_FIELD},_{$ATTENDANCE_STUDENT_FIELD}_value");
+                $select = urlencode("{$ATTENDANCE_ID_FIELD},{$ATTENDANCE_PRESENT_FIELD},{$ATTENDANCE_DATE_FIELD},{$ATTENDANCE_REMARKS_FIELD},_{$ATTENDANCE_STUDENT_FIELD}_value");
                 $url = "{$DATAVERSE_URL}/api/data/v9.2/{$ATTENDANCE_TABLE}?\$filter={$filter}&\$select={$select}";
                 $result = makeDataverseRequest('GET', $url, $accessToken);
                 
@@ -268,6 +269,8 @@ try {
                         $record['crd88_status'] = $status; // Include status field
                         $record['present'] = ($status == 1000); // Boolean for legacy compatibility
                         $record['studentId'] = $record["_{$ATTENDANCE_STUDENT_FIELD}_value"] ?? null;
+                        // Include remarks field
+                        $record['crd88_remarks'] = $record[$ATTENDANCE_REMARKS_FIELD] ?? '';
                     }
                     unset($record); // Break reference
                     
@@ -338,12 +341,18 @@ try {
                     // From relationship metadata:
                     // - Student: crd88_new_Students (capital S) not crd88_new_students
                     // - Class: crd88_Classes (capital C) not crd88_classes
+                    // Get remarks from record (if provided)
+                    $remarksText = isset($record['remarks']) ? trim($record['remarks']) : '';
+                    
                     $attendanceData = [
                         $ATTENDANCE_DATE_FIELD => $dateTimeValue,
                         "{$ATTENDANCE_STUDENT_NAV}@odata.bind" => "/{$STUDENTS_TABLE}({$studentId})",
                         "{$ATTENDANCE_CLASS_NAV}@odata.bind" => "/{$CLASSES_TABLE}({$classId})",
                         $ATTENDANCE_PRESENT_FIELD => $statusValue
                     ];
+                    
+                    // Add remarks field (always include to allow clearing)
+                    $attendanceData[$ATTENDANCE_REMARKS_FIELD] = $remarksText;
                     
                     // Note: crd88_createdby field doesn't exist in the attendance table
                     // If you need to track who created the record, add a custom field to the table first
