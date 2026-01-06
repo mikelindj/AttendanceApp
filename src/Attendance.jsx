@@ -44,7 +44,7 @@ const ATTENDANCE_STATUSES = [
 const DEFAULT_STATUS = 1000; // Present
 
 // Excluded student ID - excluded from all calculations
-const EXCLUDED_STUDENT_ID = 'c7891aae-6ad6-f011-8544-00224856f021';
+// const EXCLUDED_STUDENT_ID = 'c7891aae-6ad6-f011-8544-00224856f021';
 
 const useStyles = makeStyles({
   container: {
