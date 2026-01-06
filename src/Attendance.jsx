@@ -44,6 +44,7 @@ const ATTENDANCE_STATUSES = [
 const DEFAULT_STATUS = 1000; // Present
 
 // Excluded student ID - excluded from all calculations
+// TEMPORARY: Commented out for testing - RE-ENABLE FOR PRODUCTION
 // const EXCLUDED_STUDENT_ID = 'c7891aae-6ad6-f011-8544-00224856f021';
 
 const useStyles = makeStyles({
@@ -400,8 +401,8 @@ function Attendance() {
             
             // Add students with their attendance status (excluding excluded student)
             studentsData.students.forEach(student => {
-              // Exclude the specified student from calculations
-              if (student.new_studentsid === EXCLUDED_STUDENT_ID) return;
+              // TEMPORARY: Exclude logic disabled for testing - RE-ENABLE FOR PRODUCTION
+              // if (student.new_studentsid === EXCLUDED_STUDENT_ID) return;
               
               const status = attendanceMap[student.new_studentsid] || 1000;
               allStudents.push({
@@ -714,8 +715,8 @@ function Attendance() {
     };
 
     Object.entries(attendance).forEach(([studentId, status]) => {
-      // Exclude the specified student from calculations
-      if (studentId === EXCLUDED_STUDENT_ID) return;
+      // TEMPORARY: Exclude logic disabled for testing - RE-ENABLE FOR PRODUCTION
+      // if (studentId === EXCLUDED_STUDENT_ID) return;
       
       if (status === 1000) stats.present++;
       else if (status === 1001) stats.absent++;
@@ -810,7 +811,8 @@ function Attendance() {
     try {
       // Prepare attendance records (excluding excluded student)
       const records = students
-        .filter(student => student.new_studentsid !== EXCLUDED_STUDENT_ID)
+        // TEMPORARY: Filter disabled for testing - RE-ENABLE FOR PRODUCTION
+        // .filter(student => student.new_studentsid !== EXCLUDED_STUDENT_ID)
         .map((student) => {
           const studentId = student.new_studentsid;
           const status = attendance[studentId] || DEFAULT_STATUS;
@@ -871,8 +873,9 @@ function Attendance() {
   };
 
   const stats = getSummaryStats();
-  // Exclude the specified student from total count
-  const totalStudents = students.filter(s => s.new_studentsid !== EXCLUDED_STUDENT_ID).length;
+  // TEMPORARY: Exclude logic disabled for testing - RE-ENABLE FOR PRODUCTION
+  // const totalStudents = students.filter(s => s.new_studentsid !== EXCLUDED_STUDENT_ID).length;
+  const totalStudents = students.length;
   const selectedClassName = classes.find(c => c.crd88_classesid === selectedClass) 
     ? getClassName(classes.find(c => c.crd88_classesid === selectedClass))
     : '';
@@ -1024,11 +1027,11 @@ function Attendance() {
                 {/* Consolidated Student List */}
                 <Card style={{ padding: '16px', marginLeft: '12px', marginRight: '12px' }}>
                   <Title1 size={500} style={{ marginBottom: '16px' }}>
-                    All Students ({dashboardData.students.filter(s => s.new_studentsid !== EXCLUDED_STUDENT_ID).length})
+                    All Students ({dashboardData.students.length})
                   </Title1>
-                  {dashboardData.students.filter(s => s.new_studentsid !== EXCLUDED_STUDENT_ID).length > 0 ? (
+                  {dashboardData.students.length > 0 ? (
                     <div className={styles.dashboardStudentList}>
-                      {dashboardData.students.filter(s => s.new_studentsid !== EXCLUDED_STUDENT_ID).map((student) => {
+                      {dashboardData.students.map((student) => {
                         const statusLabel = ATTENDANCE_STATUSES.find(s => s.value === student.status)?.label || 'Present';
                         const isPresent = student.status === 1000;
                         const isAbsent = student.status === 1001;
@@ -1189,7 +1192,8 @@ function Attendance() {
               </Text>
             </div>
             <div className={styles.studentList}>
-              {students.filter(s => s.new_studentsid !== EXCLUDED_STUDENT_ID).map((student) => {
+              {/* TEMPORARY: Filter disabled for testing - RE-ENABLE FOR PRODUCTION */}
+              {students.map((student) => {
                 const studentId = student.new_studentsid;
                 const currentStatus = attendance[studentId] ?? DEFAULT_STATUS;
                 const changed = hasChanged(studentId);
