@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   FluentProvider,
   webLightTheme,
@@ -566,6 +566,47 @@ function Attendance() {
     }
   };
 
+  // Sort students based on the requested logic:
+  // 1. Attendance status (Present > Late > Absent > Early)
+  // 2. Bus Number
+  const sortedStudents = useMemo(() => {
+    if (!students || students.length === 0) return [];
+
+    return [...students].sort((a, b) => {
+      // Primary: Attendance status (from point 2)
+      // Status values: 1000=Present, 1001=Absent, 1002=Late Arrival, 1003=Early Dismissal
+      const statusA = attendance[a.new_studentsid] ?? null;
+      const statusB = attendance[b.new_studentsid] ?? null;
+
+      const statusOrder = {
+        1000: 1, // Present
+        1002: 2, // Late Arrival
+        1001: 3, // Absent
+        1003: 4, // Early Dismissal
+      };
+
+      const orderA = statusA ? (statusOrder[statusA] || 5) : 5; // Unrecorded at bottom
+      const orderB = statusB ? (statusOrder[statusB] || 5) : 5;
+
+      if (orderA !== orderB) return orderA - orderB;
+
+      // Secondary: Bus Number (from point 1)
+      const busA = a.crd88_schoolbusassigned ? a.crd88_schoolbusassigned.toString() : '';
+      const busB = b.crd88_schoolbusassigned ? b.crd88_schoolbusassigned.toString() : '';
+
+      if (busA !== busB) {
+        if (!busA) return 1;
+        if (!busB) return -1;
+        return busA.localeCompare(busB, undefined, { numeric: true });
+      }
+
+      // Tertiary: Index Number
+      const idxA = parseInt(a.crd88_indexnumber) || 0;
+      const idxB = parseInt(b.crd88_indexnumber) || 0;
+      return idxA - idxB;
+    });
+  }, [students, attendance]);
+
   // Check if running in Teams and get user authentication
   const checkAuthentication = async () => {
     try {
@@ -726,8 +767,17 @@ function Attendance() {
         throw new Error(studentsData.error || 'Failed to load students');
       }
 
-      // Sort students by index number (crd88_indexnumber) in ascending order
+      // Sort students initially by Bus Number then index number (as requested in point 1)
       const studentsList = studentsData.students.sort((a, b) => {
+        const busA = a.crd88_schoolbusassigned ? a.crd88_schoolbusassigned.toString() : '';
+        const busB = b.crd88_schoolbusassigned ? b.crd88_schoolbusassigned.toString() : '';
+
+        if (busA !== busB) {
+          if (!busA) return 1;
+          if (!busB) return -1;
+          return busA.localeCompare(busB, undefined, { numeric: true });
+        }
+
         const indexA = parseInt(a.crd88_indexnumber) || 0;
         const indexB = parseInt(b.crd88_indexnumber) || 0;
         return indexA - indexB;
@@ -1467,7 +1517,7 @@ function Attendance() {
                 </div>
                 <div className={styles.studentList}>
                   {/* TEMPORARY: Filter disabled for testing - RE-ENABLE FOR PRODUCTION */}
-                  {students.map((student) => {
+                  {sortedStudents.map((student) => {
                     const studentId = student.new_studentsid;
                     const currentStatus = attendance[studentId] ?? DEFAULT_STATUS;
                     const changed = hasChanged(studentId);

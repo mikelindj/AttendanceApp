@@ -221,7 +221,7 @@ try {
             // Filter students by class
             // For lookup fields, use the _value field format
             $filter = urlencode("_{$STUDENT_CLASS_FIELD}_value eq {$classId}");
-            $select = urlencode("{$STUDENT_ID_FIELD},{$STUDENT_NAME_FIELD},{$STUDENT_NUMBER_FIELD}");
+            $select = urlencode("{$STUDENT_ID_FIELD},{$STUDENT_NAME_FIELD},{$STUDENT_NUMBER_FIELD},{$STUDENT_BUS_FIELD}");
             $url = "{$DATAVERSE_URL}/api/data/v9.2/{$STUDENTS_TABLE}?\$filter={$filter}&\$select={$select}";
             $result = makeDataverseRequest('GET', $url, $accessToken);
 
