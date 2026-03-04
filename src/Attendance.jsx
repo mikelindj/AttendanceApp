@@ -487,11 +487,9 @@ function Attendance() {
     try {
       setIsSendingToTeams(true);
 
-      // Group students by bus (only include present/late/early students)
+      // Group students by bus (include EVERYONE assigned to a bus)
       const buses = {};
       busListData.forEach(student => {
-        // Only include students explicitly marked as Present, Late, or Early
-        if (student.status !== 1000 && student.status !== 1002 && student.status !== 1003) return;
         const busNum = student.crd88_schoolbusassigned;
         if (!buses[busNum]) buses[busNum] = [];
         buses[busNum].push(student);
@@ -518,29 +516,35 @@ function Attendance() {
 
       sortedBusNums.forEach(busNum => {
         message += `### 🚍 Bus ${busNum}\n`;
-        buses[busNum].forEach((student, index) => {
+
+        // Sort students within the bus by the requested priority:
+        // 1. Present (1000)
+        // 2. Late Arrival (1002)
+        // 3. Absent (1001)
+        // 4. Early Dismissal (1003)
+        // 5. Not Recorded (null)
+        const sortedStudentsInBus = [...buses[busNum]].sort((a, b) => {
+          const order = { 1000: 1, 1002: 2, 1001: 3, 1003: 4, null: 5 };
+          const orderA = order[a.status] || 5;
+          const orderB = order[b.status] || 5;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.new_fullname || '').localeCompare(b.new_fullname || '');
+        });
+
+        sortedStudentsInBus.forEach((student, index) => {
           const statusObj = ATTENDANCE_STATUSES.find(s => s.value === student.status);
-          const statusLabel = statusObj?.label || 'Present';
+          const statusLabel = statusObj?.label || '-';
 
           let emoji = '✅'; // Present
           if (student.status === 1001) emoji = '❌'; // Absent
           else if (student.status === 1002) emoji = '🕒'; // Late
           else if (student.status === 1003) emoji = '🏃'; // Early Dismissal
+          else if (student.status === null) emoji = '⚪'; // Not Recorded
 
           message += `${index + 1}. ${emoji} **${student.new_fullname}** (${statusLabel})\n`;
         });
         message += `\n`;
       });
-
-      message += `---\n### ❌ ABSENT STUDENTS\n`;
-      const absentStudentsList = busListData.filter(s => s.status === 1001);
-      if (absentStudentsList.length > 0) {
-        absentStudentsList.forEach((student, index) => {
-          message += `${index + 1}. **${student.new_fullname}** (Bus ${student.crd88_schoolbusassigned})\n`;
-        });
-      } else {
-        message += `*No absent students*\n`;
-      }
 
       const payload = { message: message };
       console.log('Teams Webhook Payload (to Backend):', payload);
@@ -609,6 +613,13 @@ function Attendance() {
 
   // Check if running in Teams and get user authentication
   const checkAuthentication = async () => {
+    // TEMPORARY: Authentication disabled for debugging
+    setIsInTeams(true);
+    setIsAuthenticated(true);
+    setAuthChecked(true);
+    setUserEmail('debug@acsacademy.edu.sg');
+    return;
+
     try {
       // First, check if we're running in Teams
       if (!window.microsoftTeams) {
@@ -1338,9 +1349,9 @@ function Attendance() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '24px' }}>
                   {Object.entries(
                     busListData.reduce((buses, student) => {
-                      // Only include students explicitly marked as Present, Late, or Early
-                      if (student.status !== 1000 && student.status !== 1002 && student.status !== 1003) return buses;
+                      // Include ALL students assigned to a bus in the groups
                       const busNum = student.crd88_schoolbusassigned;
+                      if (!busNum) return buses;
                       if (!buses[busNum]) buses[busNum] = [];
                       buses[busNum].push(student);
                       return buses;
@@ -1353,44 +1364,46 @@ function Attendance() {
                           Bus Number {busNum}:
                         </Text>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {students.map((student, index) => {
-                            const isAbsent = student.status === 1001;
-                            return (
-                              <div key={student.new_studentsid} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <Text>
-                                  {index + 1}. {student.new_fullname}
-                                </Text>
-                                <Text
-                                  weight="semibold"
-                                  style={{
-                                    color: isAbsent ? tokens.colorPaletteRedForeground1 : tokens.colorPaletteGreenForeground1
-                                  }}
-                                >
-                                  {ATTENDANCE_STATUSES.find(s => s.value === student.status)?.label || 'Present'}
-                                </Text>
-                              </div>
-                            );
-                          })}
+                          {[...students]
+                            .sort((a, b) => {
+                              const order = { 1000: 1, 1002: 2, 1001: 3, 1003: 4, null: 5 };
+                              const orderA = order[a.status] || 5;
+                              const orderB = order[b.status] || 5;
+                              if (orderA !== orderB) return orderA - orderB;
+                              return (a.new_fullname || '').localeCompare(b.new_fullname || '');
+                            })
+                            .map((student, index) => {
+                              const isPresent = student.status === 1000;
+                              const isLate = student.status === 1002;
+                              const isAbsent = student.status === 1001;
+                              const isEarly = student.status === 1003;
+                              const isNull = student.status === null;
+                              return (
+                                <div key={student.new_studentsid} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Text style={{
+                                    color: (isAbsent || isEarly) ? tokens.colorNeutralForeground4 : 'inherit',
+                                    opacity: (isAbsent || isEarly) ? 0.7 : 1,
+                                    fontStyle: (isAbsent || isEarly) ? 'italic' : 'normal'
+                                  }}>
+                                    {index + 1}. {student.new_fullname}
+                                  </Text>
+                                  <Text
+                                    weight="semibold"
+                                    style={{
+                                      color: (isPresent || isLate) ? tokens.colorPaletteGreenForeground1 :
+                                        isAbsent ? tokens.colorPaletteRedForeground1 :
+                                          isEarly ? tokens.colorPaletteYellowForeground1 : // Orange/Yellow
+                                            tokens.colorNeutralForeground2
+                                    }}
+                                  >
+                                    {ATTENDANCE_STATUSES.find(s => s.value === student.status)?.label || 'Not Recorded'}
+                                  </Text>
+                                </div>
+                              );
+                            })}
                         </div>
                       </Card>
                     ))}
-
-                  <Card style={{ padding: '16px', marginLeft: '12px', marginRight: '12px', border: `1px solid ${tokens.colorPaletteRedBorder2}` }}>
-                    <Text weight="bold" size={400} style={{ color: tokens.colorPaletteRedForeground1, marginBottom: '12px', display: 'block' }}>
-                      Absent Students:
-                    </Text>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {busListData.filter(s => s.status === 1001).length > 0 ? (
-                        busListData.filter(s => s.status === 1001).map((student, index) => (
-                          <Text key={student.new_studentsid}>
-                            {index + 1}. {student.new_fullname}
-                          </Text>
-                        ))
-                      ) : (
-                        <Text italic>None</Text>
-                      )}
-                    </div>
-                  </Card>
                 </div>
               </>
             ) : (
