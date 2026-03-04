@@ -31,6 +31,7 @@ $CLIENT_ID = getenv('AZURE_CLIENT_ID');
 $CLIENT_SECRET = getenv('AZURE_CLIENT_SECRET');
 $TENANT_ID = getenv('AZURE_TENANT_ID');
 $DATAVERSE_URL = getenv('DATAVERSE_URL');
+$TEAMS_WEBHOOK_URL = getenv('TEAMS_WEBHOOK_URL');
 
 // ============================================================================
 // DATAVERSE TABLE NAMES - Updated to match your Dataverse schema
@@ -473,9 +474,53 @@ try {
             ]);
             break;
 
+        case 'sendToTeams':
+            // POST /api/attendanceGateway.php?action=sendToTeams - Send message to Teams webhook
+            if ($method !== 'POST') {
+                http_response_code(405);
+                echo json_encode(['error' => 'Method Not Allowed. Use POST.']);
+                exit;
+            }
+
+            if (empty($TEAMS_WEBHOOK_URL)) {
+                http_response_code(500);
+                echo json_encode(['error' => 'TEAMS_WEBHOOK_URL is not configured on the server.']);
+                exit;
+            }
+
+            $message = $requestBody['message'] ?? '';
+            if (empty($message)) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Message is required.']);
+                exit;
+            }
+
+            // Forward to Teams webhook
+            $ch = curl_init($TEAMS_WEBHOOK_URL);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['message' => $message]));
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($curlError) {
+                http_response_code(500);
+                echo json_encode(['error' => 'CURL error when sending to Teams: ' . $curlError]);
+            } else if ($httpCode >= 400) {
+                http_response_code($httpCode);
+                echo json_encode(['error' => 'Teams Webhook returned error ' . $httpCode, 'details' => $response]);
+            } else {
+                echo json_encode(['success' => true, 'message' => 'Successfully sent to Teams.']);
+            }
+            break;
+
         default:
             http_response_code(400);
-            echo json_encode(['error' => 'Invalid action. Use: classes, students, or attendance']);
+            echo json_encode(['error' => 'Invalid action. Use: classes, students, attendance, busList, or sendToTeams']);
             break;
     }
 

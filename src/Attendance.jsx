@@ -535,24 +535,18 @@ function Attendance() {
       }
 
       const payload = { message: message };
-      console.log('Teams Webhook Payload:', payload);
+      console.log('Teams Webhook Payload (to Backend):', payload);
 
-      // Send to Power Automate Webhook
-      const webhookUrl = import.meta.env.VITE_TEAMS_WEBHOOK_URL;
-      if (!webhookUrl) {
-        console.warn('Teams Webhook URL not configured in .env (VITE_TEAMS_WEBHOOK_URL). Skipping fetch.');
-        dispatchToast('Webhook URL not configured. Check console for payload.', 'warning');
-        return;
-      }
-
-      const response = await fetch(webhookUrl, {
+      const response = await fetch(`${API_BASE_URL}/api/attendanceGateway.php?action=sendToTeams`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error(`Failed to send to Teams: ${response.statusText}`);
+        throw new Error(data.error || `Failed to send to Teams: ${response.statusText}`);
       }
 
       dispatchToast('Bus list sent to Teams successfully!', 'success');
