@@ -28,7 +28,7 @@ import {
   ToastTitle,
   ToastBody,
 } from '@fluentui/react-components';
-import { Checkmark24Regular, Dismiss24Regular, ChartMultiple24Regular, List24Regular } from '@fluentui/react-icons';
+import { Checkmark24Regular, Dismiss24Regular, ChartMultiple24Regular, List24Regular, VehicleBus24Regular, ChevronLeft24Regular, ChevronRight24Regular, Send24Regular } from '@fluentui/react-icons';
 
 // API Base URL - points to parents.acsacademy.edu.sg
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://parents.acsacademy.edu.sg';
@@ -336,11 +336,16 @@ function Attendance() {
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false); // Start as false, require auth
-  const [isInTeams, setIsInTeams] = useState(false); // Check if running in Teams
-  const [userEmail, setUserEmail] = useState('');
-  const [authChecked, setAuthChecked] = useState(false); // Track if auth check is complete
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // TEMPORARY: Allow local testing
+  const [isInTeams, setIsInTeams] = useState(true); // TEMPORARY: Allow local testing
+  const [userEmail, setUserEmail] = useState('test@acsacademy.edu.sg'); // TEMPORARY: Allow local testing
+  const [authChecked, setAuthChecked] = useState(true); // TEMPORARY: Allow local testing
   const [showDashboard, setShowDashboard] = useState(false); // Toggle between main view and dashboard
+  const [showBusView, setShowBusView] = useState(false); // Toggle bus list view
+  const [busListData, setBusListData] = useState([]);
+  const [busDate, setBusDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loadingBus, setLoadingBus] = useState(false);
+  const [isSendingToTeams, setIsSendingToTeams] = useState(false);
   const [dashboardDate, setDashboardDate] = useState(new Date().toISOString().split('T')[0]); // Dashboard date selector
   const [dashboardData, setDashboardData] = useState({ students: [], present: 0, absent: 0 }); // Dashboard consolidated data
   const [loadingDashboard, setLoadingDashboard] = useState(false);
@@ -349,37 +354,37 @@ function Attendance() {
   const loadDashboardData = async () => {
     try {
       setLoadingDashboard(true);
-      
+
       // First, get all classes
       const classesResponse = await fetch(`${API_BASE_URL}/api/attendanceGateway.php?action=classes`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
       });
-      
+
       if (!classesResponse.ok) {
         throw new Error(`Error ${classesResponse.status}: ${classesResponse.statusText}`);
       }
-      
+
       const classesData = await classesResponse.json();
       if (!classesData.success || !classesData.classes) {
         throw new Error('Failed to load classes');
       }
-      
+
       const allClasses = classesData.classes;
       const allStudents = [];
       let totalPresent = 0;
       let totalAbsent = 0;
-      
+
       // For each class, get students and their attendance
       for (const classItem of allClasses) {
         const classId = classItem.crd88_classesid;
-        
+
         // Get students in this class
         const studentsResponse = await fetch(
           `${API_BASE_URL}/api/attendanceGateway.php?action=students&classId=${classId}`,
           { method: 'GET', headers: { 'Accept': 'application/json' } }
         );
-        
+
         if (studentsResponse.ok) {
           const studentsData = await studentsResponse.json();
           if (studentsData.success && studentsData.students) {
@@ -388,7 +393,7 @@ function Attendance() {
               `${API_BASE_URL}/api/attendanceGateway.php?action=attendance&date=${dashboardDate}&classId=${classId}`,
               { method: 'GET', headers: { 'Accept': 'application/json' } }
             );
-            
+
             const attendanceMap = {};
             if (attendanceResponse.ok) {
               const attendanceData = await attendanceResponse.json();
@@ -398,33 +403,33 @@ function Attendance() {
                 });
               }
             }
-            
+
             // Add students with their attendance status (excluding excluded student)
             studentsData.students.forEach(student => {
               // TEMPORARY: Exclude logic disabled for testing - RE-ENABLE FOR PRODUCTION
               // if (student.new_studentsid === EXCLUDED_STUDENT_ID) return;
-              
+
               const status = attendanceMap[student.new_studentsid] || 1000;
               allStudents.push({
                 ...student,
                 className: getClassName(classItem),
                 status: status,
               });
-              
+
               if (status === 1000) totalPresent++;
               else if (status === 1001) totalAbsent++;
             });
           }
         }
       }
-      
+
       // Sort students by name
       allStudents.sort((a, b) => {
         const nameA = (a.new_fullname || '').toLowerCase();
         const nameB = (b.new_fullname || '').toLowerCase();
         return nameA.localeCompare(nameB);
       });
-      
+
       setDashboardData({
         students: allStudents,
         present: totalPresent,
@@ -445,48 +450,128 @@ function Attendance() {
     }
   }, [showDashboard, dashboardDate]);
 
-  // Check if running in Teams and get user authentication
-  const checkAuthentication = async () => {
+  // Load bus data when bus view is shown or date changes
+  useEffect(() => {
+    if (showBusView) {
+      loadBusData();
+    }
+  }, [showBusView, busDate]);
+
+  const loadBusData = async () => {
     try {
-      // First, check if we're running in Teams
-      if (!window.microsoftTeams) {
-        setIsInTeams(false);
-        setIsAuthenticated(false);
-        setAuthChecked(true);
-        return;
+      setLoadingBus(true);
+      const response = await fetch(`${API_BASE_URL}/api/attendanceGateway.php?action=busList&date=${busDate}`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
 
-      // We're in Teams - mark as such
-      setIsInTeams(true);
-
-      // Get user context from Teams
-      let userPrincipalName = '';
-      try {
-        const context = await window.microsoftTeams.app.getContext();
-        userPrincipalName = context.user?.userPrincipalName || context.user?.loginHint || '';
-      } catch (err) {
-        console.error('Could not get Teams context:', err);
-        // If we can't get context, user might need to authenticate
-        setIsAuthenticated(false);
-        setAuthChecked(true);
-        return;
-      }
-
-      // Require @acsacademy.edu.sg domain - strict check
-      if (userPrincipalName && userPrincipalName.toLowerCase().endsWith('@acsacademy.edu.sg')) {
-        setIsAuthenticated(true);
-        setUserEmail(userPrincipalName);
+      const data = await response.json();
+      if (data.success && data.students) {
+        setBusListData(data.students);
       } else {
-        // User is not from required domain or not logged in
-        setIsAuthenticated(false);
-        setUserEmail(userPrincipalName || '');
+        throw new Error(data.error || 'Failed to load bus data');
       }
     } catch (err) {
-      console.error('Auth check error:', err);
-      setIsAuthenticated(false);
+      console.error('Error loading bus data:', err);
+      dispatchToast('Error loading bus data: ' + err.message, 'error');
     } finally {
-      setAuthChecked(true);
+      setLoadingBus(false);
     }
+  };
+
+  const sendToTeams = async () => {
+    try {
+      setIsSendingToTeams(true);
+
+      // Group students by bus (excluding absent students from groups)
+      const buses = {};
+      busListData.forEach(student => {
+        if (student.status === 1001) return; // Skip absent students for bus grouping
+        const busNum = student.crd88_schoolbusassigned;
+        if (!buses[busNum]) buses[busNum] = [];
+        buses[busNum].push(student);
+      });
+
+      // Sort bus numbers
+      const sortedBusNums = Object.keys(buses).sort((a, b) => a.toString().localeCompare(b.toString()));
+
+      // Format message with better layout and emojis
+      const totalStudents = busListData.length;
+      const absentCount = busListData.filter(s => s.status === 1001).length;
+      const presentCount = totalStudents - absentCount;
+
+      let message = `🚌 BUS LIST\n\n`;
+      message += `# 📅 ${formatBusDate(busDate)}\n\n`;
+      message += `#### Summary: ${presentCount} Present / ${absentCount} Absent\n\n---\n\n`;
+
+      sortedBusNums.forEach(busNum => {
+        message += `### 🚍 Bus ${busNum}\n`;
+        buses[busNum].forEach((student, index) => {
+          const statusObj = ATTENDANCE_STATUSES.find(s => s.value === student.status);
+          const statusLabel = statusObj?.label || 'Present';
+
+          let emoji = '✅'; // Present
+          if (student.status === 1001) emoji = '❌'; // Absent
+          else if (student.status === 1002) emoji = '🕒'; // Late
+          else if (student.status === 1003) emoji = '🏃'; // Early Dismissal
+
+          message += `${index + 1}. ${emoji} **${student.new_fullname}** (${statusLabel})\n`;
+        });
+        message += `\n`;
+      });
+
+      message += `---\n### ❌ ABSENT STUDENTS\n`;
+      const absentStudentsList = busListData.filter(s => s.status === 1001);
+      if (absentStudentsList.length > 0) {
+        absentStudentsList.forEach((student, index) => {
+          message += `${index + 1}. **${student.new_fullname}** (Bus ${student.crd88_schoolbusassigned})\n`;
+        });
+      } else {
+        message += `*No absent students*\n`;
+      }
+
+      const payload = { message: message };
+      console.log('Teams Webhook Payload:', payload);
+
+      // Send to Power Automate Webhook
+      const webhookUrl = import.meta.env.VITE_TEAMS_WEBHOOK_URL;
+      if (!webhookUrl) {
+        console.warn('Teams Webhook URL not configured in .env (VITE_TEAMS_WEBHOOK_URL). Skipping fetch.');
+        dispatchToast('Webhook URL not configured. Check console for payload.', 'warning');
+        return;
+      }
+
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to send to Teams: ${response.statusText}`);
+      }
+
+      dispatchToast('Bus list sent to Teams successfully!', 'success');
+    } catch (err) {
+      console.error('Error sending to Teams:', err);
+      dispatchToast('Failed to send to Teams: ' + err.message, 'error');
+    } finally {
+      setIsSendingToTeams(false);
+    }
+  };
+
+  // Check if running in Teams and get user authentication
+  const checkAuthentication = async () => {
+    // TEMPORARY: Skip authentication for local testing
+    setIsInTeams(true);
+    setIsAuthenticated(true);
+    setUserEmail('test@acsacademy.edu.sg');
+    setAuthChecked(true);
+    return;
   };
 
 
@@ -611,7 +696,7 @@ function Attendance() {
         const indexB = parseInt(b.crd88_indexnumber) || 0;
         return indexA - indexB;
       });
-      
+
       setStudents(studentsList);
 
       // Initialize attendance state with all students as Present (default)
@@ -717,7 +802,7 @@ function Attendance() {
     Object.entries(attendance).forEach(([studentId, status]) => {
       // TEMPORARY: Exclude logic disabled for testing - RE-ENABLE FOR PRODUCTION
       // if (studentId === EXCLUDED_STUDENT_ID) return;
-      
+
       if (status === 1000) stats.present++;
       else if (status === 1001) stats.absent++;
       else if (status === 1002) stats.late++;
@@ -768,11 +853,21 @@ function Attendance() {
   // Format date for display
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
     });
+  };
+
+  const formatBusDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear().toString().slice(-2);
+    return `${day} ${month} ${year}`;
   };
 
   // Handle submit button click
@@ -795,7 +890,7 @@ function Attendance() {
   // Submit attendance
   const submitAttendance = async () => {
     setShowConfirmDialog(false);
-    
+
     if (!selectedClass || !selectedDate) {
       dispatchToast(
         <Toast>
@@ -852,7 +947,7 @@ function Attendance() {
         // Update original state to current state (clear unsaved changes)
         setOriginalAttendance({ ...attendance });
         setOriginalRemarks({ ...remarks });
-        
+
         // Reload to show updated data
         await loadStudents();
       } else {
@@ -876,7 +971,7 @@ function Attendance() {
   // TEMPORARY: Exclude logic disabled for testing - RE-ENABLE FOR PRODUCTION
   // const totalStudents = students.filter(s => s.new_studentsid !== EXCLUDED_STUDENT_ID).length;
   const totalStudents = students.length;
-  const selectedClassName = classes.find(c => c.crd88_classesid === selectedClass) 
+  const selectedClassName = classes.find(c => c.crd88_classesid === selectedClass)
     ? getClassName(classes.find(c => c.crd88_classesid === selectedClass))
     : '';
 
@@ -933,8 +1028,8 @@ function Attendance() {
             <Text style={{ marginTop: '16px', display: 'block', opacity: 0.7 }}>
               Please sign in with an @acsacademy.edu.sg account in Teams.
             </Text>
-            <Button 
-              appearance="primary" 
+            <Button
+              appearance="primary"
               style={{ marginTop: '24px' }}
               onClick={async () => {
                 // Try to re-check authentication
@@ -967,7 +1062,22 @@ function Attendance() {
           </Text>
           <button
             className={styles.dashboardToggle}
-            onClick={() => setShowDashboard(!showDashboard)}
+            onClick={() => {
+              setShowBusView(!showBusView);
+              if (showDashboard) setShowDashboard(false);
+            }}
+            title={showBusView ? 'Switch to Attendance View' : 'Switch to Bus View'}
+            aria-label={showBusView ? 'Switch to Attendance View' : 'Switch to Bus View'}
+            style={{ marginRight: '8px' }}
+          >
+            {showBusView ? <List24Regular /> : <VehicleBus24Regular />}
+          </button>
+          <button
+            className={styles.dashboardToggle}
+            onClick={() => {
+              setShowDashboard(!showDashboard);
+              if (showBusView) setShowBusView(false);
+            }}
             title={showDashboard ? 'Switch to Attendance View' : 'Switch to Dashboard View'}
             aria-label={showDashboard ? 'Switch to Attendance View' : 'Switch to Dashboard View'}
           >
@@ -1035,7 +1145,7 @@ function Attendance() {
                         const statusLabel = ATTENDANCE_STATUSES.find(s => s.value === student.status)?.label || 'Present';
                         const isPresent = student.status === 1000;
                         const isAbsent = student.status === 1001;
-                        
+
                         return (
                           <div key={student.new_studentsid} className={styles.dashboardStudentItem}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1048,10 +1158,10 @@ function Attendance() {
                               <div style={{
                                 padding: '4px 12px',
                                 borderRadius: tokens.borderRadiusSmall,
-                                backgroundColor: isPresent 
-                                  ? tokens.colorPaletteGreenBackground2 
-                                  : isAbsent 
-                                    ? tokens.colorPaletteRedBackground2 
+                                backgroundColor: isPresent
+                                  ? tokens.colorPaletteGreenBackground2
+                                  : isAbsent
+                                    ? tokens.colorPaletteRedBackground2
                                     : tokens.colorNeutralBackground2,
                                 color: isPresent
                                   ? tokens.colorPaletteGreenForeground1
@@ -1073,6 +1183,131 @@ function Attendance() {
                   )}
                 </Card>
               </>
+            )}
+          </div>
+        ) : showBusView ? (
+          <div className={styles.dashboardContainer}>
+            {/* Bus List Date Selector */}
+            <Card style={{ padding: '12px', marginBottom: '16px', marginLeft: '12px', marginRight: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <Label htmlFor="busDate" required size="small" style={{ fontSize: '12px' }}>
+                    Date
+                  </Label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Button
+                      icon={<ChevronLeft24Regular />}
+                      appearance="subtle"
+                      onClick={() => {
+                        const d = new Date(busDate);
+                        d.setDate(d.getDate() - 1);
+                        setBusDate(d.toISOString().split('T')[0]);
+                      }}
+                    />
+                    <input
+                      id="busDate"
+                      type="date"
+                      value={busDate}
+                      onChange={(e) => setBusDate(e.target.value)}
+                      className={styles.dateInput}
+                      style={{ maxWidth: '160px' }}
+                    />
+                    <Button
+                      icon={<ChevronRight24Regular />}
+                      appearance="subtle"
+                      onClick={() => {
+                        const d = new Date(busDate);
+                        d.setDate(d.getDate() + 1);
+                        setBusDate(d.toISOString().split('T')[0]);
+                      }}
+                    />
+                  </div>
+                </div>
+                <Button
+                  appearance="primary"
+                  icon={isSendingToTeams ? <Spinner size="tiny" /> : <Send24Regular />}
+                  onClick={sendToTeams}
+                  disabled={loadingBus || busListData.length === 0 || isSendingToTeams}
+                  aria-label="Send to Teams"
+                  title="Send to Teams"
+                />
+              </div>
+            </Card>
+
+            <Text size={400} style={{ margin: '0 24px 0', color: tokens.colorNeutralForeground1, display: 'block' }}>
+              BUS LIST
+            </Text>
+            <Title1 size={400} weight="semibold" style={{ margin: '0 24px 16px', color: tokens.colorNeutralForeground1, display: 'block' }}>
+              {formatBusDate(busDate)}
+            </Title1>
+
+            {loadingBus ? (
+              <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
+                <Spinner size="large" label="Loading bus list..." />
+              </Card>
+            ) : busListData.length > 0 ? (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '24px' }}>
+                  {Object.entries(
+                    busListData.reduce((buses, student) => {
+                      if (student.status === 1001) return buses; // Skip absent students for groups
+                      const busNum = student.crd88_schoolbusassigned;
+                      if (!buses[busNum]) buses[busNum] = [];
+                      buses[busNum].push(student);
+                      return buses;
+                    }, {})
+                  )
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([busNum, students]) => (
+                      <Card key={busNum} style={{ padding: '16px', marginLeft: '12px', marginRight: '12px' }}>
+                        <Text weight="bold" size={400} style={{ marginBottom: '12px', display: 'block' }}>
+                          Bus Number {busNum}:
+                        </Text>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {students.map((student, index) => {
+                            const isAbsent = student.status === 1001;
+                            return (
+                              <div key={student.new_studentsid} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <Text>
+                                  {index + 1}. {student.new_fullname}
+                                </Text>
+                                <Text
+                                  weight="semibold"
+                                  style={{
+                                    color: isAbsent ? tokens.colorPaletteRedForeground1 : tokens.colorPaletteGreenForeground1
+                                  }}
+                                >
+                                  {ATTENDANCE_STATUSES.find(s => s.value === student.status)?.label || 'Present'}
+                                </Text>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Card>
+                    ))}
+
+                  <Card style={{ padding: '16px', marginLeft: '12px', marginRight: '12px', border: `1px solid ${tokens.colorPaletteRedBorder2}` }}>
+                    <Text weight="bold" size={400} style={{ color: tokens.colorPaletteRedForeground1, marginBottom: '12px', display: 'block' }}>
+                      Absent Students:
+                    </Text>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {busListData.filter(s => s.status === 1001).length > 0 ? (
+                        busListData.filter(s => s.status === 1001).map((student, index) => (
+                          <Text key={student.new_studentsid}>
+                            {index + 1}. {student.new_fullname}
+                          </Text>
+                        ))
+                      ) : (
+                        <Text italic>None</Text>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+              </>
+            ) : (
+              <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
+                <Text>No students with bus assignments found.</Text>
+              </Card>
             )}
           </div>
         ) : (
@@ -1099,263 +1334,263 @@ function Attendance() {
             )}
 
             {/* Controls */}
-        <Card style={{ padding: '12px', marginBottom: '16px', marginLeft: '12px', marginRight: '12px', overflow: 'visible', position: 'relative', zIndex: 50 }}>
-          <div className={styles.controls}>
-            <div className={styles.dateControlGroup}>
-              <Label htmlFor="attendanceDate" required size="small" style={{ fontSize: '12px' }}>
-                Date
-              </Label>
-              <input
-                id="attendanceDate"
-                type="date"
-                value={selectedDate}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className={styles.dateInput}
-              />
-            </div>
-            <div className={styles.controlGroup}>
-              <Label htmlFor="classDropdown" required size="small" style={{ fontSize: '12px' }}>
-                Class
-              </Label>
-              {loadingClasses ? (
-                <Spinner size="small" />
-              ) : (
-                <div style={{ position: 'relative', zIndex: 10000, isolation: 'isolate' }}>
-                  <select
-                    id="classDropdown"
-                    value={selectedClass}
-                    onChange={(e) => handleClassChange(e.target.value)}
-                    onClick={(e) => {
-                      // Prevent event bubbling that might interfere
-                      e.stopPropagation();
-                    }}
-                    onTouchStart={(e) => {
-                      // Ensure touch events work on mobile
-                      e.stopPropagation();
-                    }}
-                    className={styles.classSelect}
-                    style={{
-                      width: '100%',
-                      WebkitAppearance: 'menulist',
-                      MozAppearance: 'menulist',
-                      appearance: 'menulist',
-                      position: 'relative',
-                      zIndex: 10001,
-                      touchAction: 'manipulation',
-                    }}
-                  >
-                    <option value="">Select a class...</option>
-                    {classes.map((classItem) => {
-                      const classId = classItem.crd88_classesid;
-                      return (
-                        <option key={classId} value={classId}>
-                          {getClassName(classItem)}
-                        </option>
-                      );
-                    })}
-                  </select>
+            <Card style={{ padding: '12px', marginBottom: '16px', marginLeft: '12px', marginRight: '12px', overflow: 'visible', position: 'relative', zIndex: 50 }}>
+              <div className={styles.controls}>
+                <div className={styles.dateControlGroup}>
+                  <Label htmlFor="attendanceDate" required size="small" style={{ fontSize: '12px' }}>
+                    Date
+                  </Label>
+                  <input
+                    id="attendanceDate"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => handleDateChange(e.target.value)}
+                    className={styles.dateInput}
+                  />
                 </div>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* Loading State with Skeleton */}
-        {loading && (
-          <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
-            <Title1 size={500} style={{ marginBottom: '16px' }}>
-              Students
-            </Title1>
-            <div className={styles.studentList}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
-                <div key={i} className={styles.skeletonRow}>
-                  <div className={styles.studentInfo} style={{ flex: 1 }}>
-                    <div className={`${styles.skeletonText} ${styles.skeletonTextLarge}`} />
-                    <div className={`${styles.skeletonText} ${styles.skeletonTextSmall}`} style={{ marginTop: '4px' }} />
-                  </div>
-                  <div className={styles.skeletonSelect} />
+                <div className={styles.controlGroup}>
+                  <Label htmlFor="classDropdown" required size="small" style={{ fontSize: '12px' }}>
+                    Class
+                  </Label>
+                  {loadingClasses ? (
+                    <Spinner size="small" />
+                  ) : (
+                    <div style={{ position: 'relative', zIndex: 10000, isolation: 'isolate' }}>
+                      <select
+                        id="classDropdown"
+                        value={selectedClass}
+                        onChange={(e) => handleClassChange(e.target.value)}
+                        onClick={(e) => {
+                          // Prevent event bubbling that might interfere
+                          e.stopPropagation();
+                        }}
+                        onTouchStart={(e) => {
+                          // Ensure touch events work on mobile
+                          e.stopPropagation();
+                        }}
+                        className={styles.classSelect}
+                        style={{
+                          width: '100%',
+                          WebkitAppearance: 'menulist',
+                          MozAppearance: 'menulist',
+                          appearance: 'menulist',
+                          position: 'relative',
+                          zIndex: 10001,
+                          touchAction: 'manipulation',
+                        }}
+                      >
+                        <option value="">Select a class...</option>
+                        {classes.map((classItem) => {
+                          const classId = classItem.crd88_classesid;
+                          return (
+                            <option key={classId} value={classId}>
+                              {getClassName(classItem)}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </Card>
-        )}
+              </div>
+            </Card>
 
-        {/* Student List */}
-        {!loading && selectedClass && students.length > 0 && (
-          <div>
-            <div className={styles.studentHeader}>
-              <Text size={300} weight="semibold" style={{ fontSize: '14px', flex: 1 }}>
-                Students ({totalStudents})
-              </Text>
-              <Text size={300} weight="semibold" style={{ fontSize: '14px', width: '120px', textAlign: 'right' }}>
-                Status
-              </Text>
-            </div>
-            <div className={styles.studentList}>
-              {/* TEMPORARY: Filter disabled for testing - RE-ENABLE FOR PRODUCTION */}
-              {students.map((student) => {
-                const studentId = student.new_studentsid;
-                const currentStatus = attendance[studentId] ?? DEFAULT_STATUS;
-                const changed = hasChanged(studentId);
-                const studentNumber = student.crd88_indexnumber;
+            {/* Loading State with Skeleton */}
+            {loading && (
+              <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
+                <Title1 size={500} style={{ marginBottom: '16px' }}>
+                  Students
+                </Title1>
+                <div className={styles.studentList}>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
+                    <div key={i} className={styles.skeletonRow}>
+                      <div className={styles.studentInfo} style={{ flex: 1 }}>
+                        <div className={`${styles.skeletonText} ${styles.skeletonTextLarge}`} />
+                        <div className={`${styles.skeletonText} ${styles.skeletonTextSmall}`} style={{ marginTop: '4px' }} />
+                      </div>
+                      <div className={styles.skeletonSelect} />
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
-                const currentRemarks = remarks[studentId] || '';
-                const showRemarks = currentStatus !== 1000; // Show remarks if not Present
+            {/* Student List */}
+            {!loading && selectedClass && students.length > 0 && (
+              <div>
+                <div className={styles.studentHeader}>
+                  <Text size={300} weight="semibold" style={{ fontSize: '14px', flex: 1 }}>
+                    Students ({totalStudents})
+                  </Text>
+                  <Text size={300} weight="semibold" style={{ fontSize: '14px', width: '120px', textAlign: 'right' }}>
+                    Status
+                  </Text>
+                </div>
+                <div className={styles.studentList}>
+                  {/* TEMPORARY: Filter disabled for testing - RE-ENABLE FOR PRODUCTION */}
+                  {students.map((student) => {
+                    const studentId = student.new_studentsid;
+                    const currentStatus = attendance[studentId] ?? DEFAULT_STATUS;
+                    const changed = hasChanged(studentId);
+                    const studentNumber = student.crd88_indexnumber;
 
-                return (
-                  <div
-                    key={studentId}
-                    className={`${styles.studentRow} ${changed ? styles.studentRowChanged : ''}`}
-                    style={{ flexDirection: 'column', alignItems: 'stretch' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                      <div className={styles.studentInfo}>
-                        <Text weight="semibold">{getStudentName(student)}</Text>
-                        {studentNumber && (
-                          <Text size={200} style={{ opacity: 0.7 }}>
-                            #{studentNumber}
-                          </Text>
+                    const currentRemarks = remarks[studentId] || '';
+                    const showRemarks = currentStatus !== 1000; // Show remarks if not Present
+
+                    return (
+                      <div
+                        key={studentId}
+                        className={`${styles.studentRow} ${changed ? styles.studentRowChanged : ''}`}
+                        style={{ flexDirection: 'column', alignItems: 'stretch' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                          <div className={styles.studentInfo}>
+                            <Text weight="semibold">{getStudentName(student)}</Text>
+                            {studentNumber && (
+                              <Text size={200} style={{ opacity: 0.7 }}>
+                                #{studentNumber}
+                              </Text>
+                            )}
+                          </div>
+                          <div style={{ width: '120px', flexShrink: 0 }}>
+                            <select
+                              value={currentStatus.toString()}
+                              onChange={(e) => {
+                                updateAttendanceStatus(studentId, parseInt(e.target.value));
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px 10px',
+                                borderRadius: tokens.borderRadiusMedium,
+                                border: `1px solid ${tokens.colorNeutralStroke1}`,
+                                fontSize: '14px',
+                                fontFamily: 'inherit',
+                                minHeight: '38px',
+                                backgroundColor: 'white',
+                              }}
+                            >
+                              {ATTENDANCE_STATUSES.map((status) => (
+                                <option key={status.value} value={status.value.toString()}>
+                                  {status.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        {showRemarks && (
+                          <div style={{ marginTop: '8px', width: '100%' }}>
+                            <input
+                              type="text"
+                              placeholder="Enter remarks..."
+                              value={currentRemarks}
+                              onChange={(e) => {
+                                updateRemarks(studentId, e.target.value);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                borderRadius: tokens.borderRadiusMedium,
+                                border: `1px solid ${tokens.colorNeutralStroke1}`,
+                                fontSize: '14px',
+                                fontFamily: 'inherit',
+                                minHeight: '38px',
+                                backgroundColor: 'white',
+                                boxSizing: 'border-box',
+                              }}
+                            />
+                          </div>
                         )}
                       </div>
-                      <div style={{ width: '120px', flexShrink: 0 }}>
-                        <select
-                          value={currentStatus.toString()}
-                          onChange={(e) => {
-                            updateAttendanceStatus(studentId, parseInt(e.target.value));
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '8px 10px',
-                            borderRadius: tokens.borderRadiusMedium,
-                            border: `1px solid ${tokens.colorNeutralStroke1}`,
-                            fontSize: '14px',
-                            fontFamily: 'inherit',
-                            minHeight: '38px',
-                            backgroundColor: 'white',
-                          }}
-                        >
-                          {ATTENDANCE_STATUSES.map((status) => (
-                            <option key={status.value} value={status.value.toString()}>
-                              {status.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    {showRemarks && (
-                      <div style={{ marginTop: '8px', width: '100%' }}>
-                        <input
-                          type="text"
-                          placeholder="Enter remarks..."
-                          value={currentRemarks}
-                          onChange={(e) => {
-                            updateRemarks(studentId, e.target.value);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '8px 12px',
-                            borderRadius: tokens.borderRadiusMedium,
-                            border: `1px solid ${tokens.colorNeutralStroke1}`,
-                            fontSize: '14px',
-                            fontFamily: 'inherit',
-                            minHeight: '38px',
-                            backgroundColor: 'white',
-                            boxSizing: 'border-box',
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && selectedClass && students.length === 0 && (
-          <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
-            <Text>No students found for this class.</Text>
-          </Card>
-        )}
-
-        {!loading && !selectedClass && (
-          <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
-            <Text>Please select a class to view students.</Text>
-          </Card>
-        )}
-
-        {/* Floating Summary Bar */}
-        {!loading && selectedClass && students.length > 0 && (
-          <div className={styles.summaryBar}>
-            <div className={styles.summaryStats}>
-              <div className={styles.statItem}>
-                <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.present}</Text>
-                <Text style={{ fontSize: '12px' }}>Present</Text>
-              </div>
-              <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
-              <div className={styles.statItem}>
-                <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.absent}</Text>
-                <Text style={{ fontSize: '12px' }}>Absent</Text>
-              </div>
-              <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
-              <div className={styles.statItem}>
-                <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.late}</Text>
-                <Text style={{ fontSize: '12px' }}>Late</Text>
-              </div>
-              <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
-              <div className={styles.statItem}>
-                <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.early}</Text>
-                <Text style={{ fontSize: '12px' }}>Early</Text>
-              </div>
-            </div>
-            <Button
-              appearance="primary"
-              onClick={handleSubmitClick}
-              disabled={isSubmitting}
-              className={styles.submitButton}
-            >
-              {isSubmitting ? 'Saving...' : 'Submit Attendance'}
-            </Button>
-          </div>
-        )}
-
-        {/* Confirmation Dialog */}
-        <Dialog open={showConfirmDialog} onOpenChange={(_, data) => setShowConfirmDialog(data.open)}>
-          <DialogSurface>
-            <DialogBody>
-              <DialogTitle>Confirm Attendance</DialogTitle>
-              <DialogContent>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
-                  <Text>
-                    <strong>Class:</strong> {selectedClassName}
-                  </Text>
-                  <Text>
-                    <strong>Date:</strong> {formatDate(selectedDate)}
-                  </Text>
-                  <Text style={{ marginTop: '8px' }}>
-                    You are about to save/update <strong>{totalStudents}</strong> records.
-                  </Text>
+                    );
+                  })}
                 </div>
-              </DialogContent>
-              <DialogActions>
-                <Button
-                  appearance="secondary"
-                  onClick={() => setShowConfirmDialog(false)}
-                >
-                  Cancel
-                </Button>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!loading && selectedClass && students.length === 0 && (
+              <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
+                <Text>No students found for this class.</Text>
+              </Card>
+            )}
+
+            {!loading && !selectedClass && (
+              <Card style={{ padding: '20px', marginLeft: '12px', marginRight: '12px' }}>
+                <Text>Please select a class to view students.</Text>
+              </Card>
+            )}
+
+            {/* Floating Summary Bar */}
+            {!loading && selectedClass && students.length > 0 && (
+              <div className={styles.summaryBar}>
+                <div className={styles.summaryStats}>
+                  <div className={styles.statItem}>
+                    <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.present}</Text>
+                    <Text style={{ fontSize: '12px' }}>Present</Text>
+                  </div>
+                  <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
+                  <div className={styles.statItem}>
+                    <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.absent}</Text>
+                    <Text style={{ fontSize: '12px' }}>Absent</Text>
+                  </div>
+                  <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
+                  <div className={styles.statItem}>
+                    <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.late}</Text>
+                    <Text style={{ fontSize: '12px' }}>Late</Text>
+                  </div>
+                  <span style={{ color: tokens.colorNeutralStroke2, fontSize: '12px' }}>|</span>
+                  <div className={styles.statItem}>
+                    <Text weight="semibold" style={{ fontSize: '12px' }}>{stats.early}</Text>
+                    <Text style={{ fontSize: '12px' }}>Early</Text>
+                  </div>
+                </div>
                 <Button
                   appearance="primary"
-                  onClick={submitAttendance}
+                  onClick={handleSubmitClick}
                   disabled={isSubmitting}
+                  className={styles.submitButton}
                 >
-                  Confirm & Save
+                  {isSubmitting ? 'Saving...' : 'Submit Attendance'}
                 </Button>
-              </DialogActions>
-            </DialogBody>
-          </DialogSurface>
-        </Dialog>
+              </div>
+            )}
+
+            {/* Confirmation Dialog */}
+            <Dialog open={showConfirmDialog} onOpenChange={(_, data) => setShowConfirmDialog(data.open)}>
+              <DialogSurface>
+                <DialogBody>
+                  <DialogTitle>Confirm Attendance</DialogTitle>
+                  <DialogContent>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
+                      <Text>
+                        <strong>Class:</strong> {selectedClassName}
+                      </Text>
+                      <Text>
+                        <strong>Date:</strong> {formatDate(selectedDate)}
+                      </Text>
+                      <Text style={{ marginTop: '8px' }}>
+                        You are about to save/update <strong>{totalStudents}</strong> records.
+                      </Text>
+                    </div>
+                  </DialogContent>
+                  <DialogActions>
+                    <Button
+                      appearance="secondary"
+                      onClick={() => setShowConfirmDialog(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      appearance="primary"
+                      onClick={submitAttendance}
+                      disabled={isSubmitting}
+                    >
+                      Confirm & Save
+                    </Button>
+                  </DialogActions>
+                </DialogBody>
+              </DialogSurface>
+            </Dialog>
           </>
         )}
       </div>

@@ -70,6 +70,7 @@ $STUDENT_ID_FIELD = 'new_studentsid';           // Primary ID field (from sample
 $STUDENT_NAME_FIELD = 'new_fullname';           // Name field (from sample: new_fullname)
 $STUDENT_NUMBER_FIELD = 'crd88_indexnumber';    // Student number/index (from sample: crd88_indexnumber)
 $STUDENT_CLASS_FIELD = 'crd88_class';           // Class lookup field logical name (from sample: _crd88_class_value)
+$STUDENT_BUS_FIELD = 'crd88_schoolbusassigned'; // Bus assigned field
 
 // Validate configuration
 if (empty($CLIENT_ID) || empty($CLIENT_SECRET) || empty($TENANT_ID)) {
@@ -83,19 +84,20 @@ if (empty($CLIENT_ID) || empty($CLIENT_SECRET) || empty($TENANT_ID)) {
 /**
  * Get Azure AD access token using client credentials flow
  */
-function getAccessToken($tenantId, $clientId, $clientSecret, $dataverseUrl) {
+function getAccessToken($tenantId, $clientId, $clientSecret, $dataverseUrl)
+{
     $tokenUrl = "https://login.microsoftonline.com/{$tenantId}/oauth2/v2.0/token";
-    
+
     // Extract org name from Dataverse URL for scope
     $scope = rtrim($dataverseUrl, '/') . '/.default';
-    
+
     $data = [
         'client_id' => $clientId,
         'client_secret' => $clientSecret,
         'scope' => $scope,
         'grant_type' => 'client_credentials'
     ];
-    
+
     $ch = curl_init($tokenUrl);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
@@ -103,29 +105,30 @@ function getAccessToken($tenantId, $clientId, $clientSecret, $dataverseUrl) {
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/x-www-form-urlencoded'
     ]);
-    
+
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    
+
     if ($httpCode !== 200) {
         throw new Exception("Failed to get access token: HTTP {$httpCode} - {$response}");
     }
-    
+
     $tokenData = json_decode($response, true);
     if (!isset($tokenData['access_token'])) {
         throw new Exception("Access token not found in response");
     }
-    
+
     return $tokenData['access_token'];
 }
 
 /**
  * Make API request to Dataverse
  */
-function makeDataverseRequest($method, $url, $accessToken, $data = null) {
+function makeDataverseRequest($method, $url, $accessToken, $data = null)
+{
     $ch = curl_init($url);
-    
+
     $headers = [
         'Authorization: Bearer ' . $accessToken,
         'Content-Type: application/json',
@@ -134,10 +137,10 @@ function makeDataverseRequest($method, $url, $accessToken, $data = null) {
         'Accept: application/json',
         'Prefer: return=representation'
     ];
-    
+
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
+
     switch ($method) {
         case 'GET':
             break;
@@ -158,16 +161,16 @@ function makeDataverseRequest($method, $url, $accessToken, $data = null) {
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
             break;
     }
-    
+
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
     curl_close($ch);
-    
+
     if ($error) {
         throw new Exception("cURL error: {$error}");
     }
-    
+
     return [
         'status' => $httpCode,
         'body' => $response
@@ -177,12 +180,12 @@ function makeDataverseRequest($method, $url, $accessToken, $data = null) {
 try {
     // Get access token
     $accessToken = getAccessToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET, $DATAVERSE_URL);
-    
+
     $method = $_SERVER['REQUEST_METHOD'];
     $requestBody = json_decode(file_get_contents('php://input'), true);
     $queryParams = $_GET;
     $action = $queryParams['action'] ?? '';
-    
+
     switch ($action) {
         case 'classes':
             // GET /api/attendanceGateway.php?action=classes - Get all classes
@@ -192,7 +195,7 @@ try {
             // $select = urlencode("{$CLASS_ID_FIELD},{$CLASS_NAME_FIELD},{$CLASS_CODE_FIELD}");
             $url = "{$DATAVERSE_URL}/api/data/v9.2/{$CLASSES_TABLE}?\$select={$select}";
             $result = makeDataverseRequest('GET', $url, $accessToken);
-            
+
             if ($result['status'] === 200) {
                 $data = json_decode($result['body'], true);
                 echo json_encode([
@@ -204,7 +207,7 @@ try {
                 echo json_encode(['error' => 'Failed to fetch classes', 'details' => $result['body']]);
             }
             break;
-            
+
         case 'students':
             // GET /api/attendanceGateway.php?action=students&classId=xxx - Get students in a class
             $classId = $queryParams['classId'] ?? null;
@@ -213,14 +216,14 @@ try {
                 echo json_encode(['error' => 'classId parameter is required']);
                 exit;
             }
-            
+
             // Filter students by class
             // For lookup fields, use the _value field format
             $filter = urlencode("_{$STUDENT_CLASS_FIELD}_value eq {$classId}");
             $select = urlencode("{$STUDENT_ID_FIELD},{$STUDENT_NAME_FIELD},{$STUDENT_NUMBER_FIELD}");
             $url = "{$DATAVERSE_URL}/api/data/v9.2/{$STUDENTS_TABLE}?\$filter={$filter}&\$select={$select}";
             $result = makeDataverseRequest('GET', $url, $accessToken);
-            
+
             if ($result['status'] === 200) {
                 $data = json_decode($result['body'], true);
                 echo json_encode([
@@ -232,19 +235,19 @@ try {
                 echo json_encode(['error' => 'Failed to fetch students', 'details' => $result['body']]);
             }
             break;
-            
+
         case 'attendance':
             if ($method === 'GET') {
                 // GET /api/attendanceGateway.php?action=attendance&date=2024-01-01&classId=xxx - Get attendance for a date
                 $date = $queryParams['date'] ?? null;
                 $classId = $queryParams['classId'] ?? null;
-                
+
                 if (!$date || !$classId) {
                     http_response_code(400);
                     echo json_encode(['error' => 'date and classId parameters are required']);
                     exit;
                 }
-                
+
                 // Filter attendance by date and class
                 // Format date for Dataverse: convert YYYY-MM-DD to datetime
                 $dateTime = $date . 'T00:00:00Z';
@@ -258,7 +261,7 @@ try {
                 $select = urlencode("{$ATTENDANCE_ID_FIELD},{$ATTENDANCE_PRESENT_FIELD},{$ATTENDANCE_DATE_FIELD},{$ATTENDANCE_REMARKS_FIELD},_{$ATTENDANCE_STUDENT_FIELD}_value");
                 $url = "{$DATAVERSE_URL}/api/data/v9.2/{$ATTENDANCE_TABLE}?\$filter={$filter}&\$select={$select}";
                 $result = makeDataverseRequest('GET', $url, $accessToken);
-                
+
                 if ($result['status'] === 200) {
                     $data = json_decode($result['body'], true);
                     // Map attendance records to include present field and status for frontend compatibility
@@ -273,7 +276,7 @@ try {
                         $record['crd88_remarks'] = $record[$ATTENDANCE_REMARKS_FIELD] ?? '';
                     }
                     unset($record); // Break reference
-                    
+
                     echo json_encode([
                         'success' => true,
                         'attendance' => $attendanceRecords
@@ -289,24 +292,24 @@ try {
                     echo json_encode(['error' => 'date, classId, and records are required']);
                     exit;
                 }
-                
+
                 $date = $requestBody['date'];
                 $classId = $requestBody['classId'];
                 $records = $requestBody['records']; // Array of {studentId, present}
                 $createdBy = $requestBody['createdBy'] ?? null;
-                
+
                 $results = [];
                 $errors = [];
-                
+
                 foreach ($records as $record) {
                     $studentId = $record['studentId'];
-                    
+
                     // Support both 'status' field (direct) and 'present' field (legacy boolean)
                     // Choice field values: 1000=Present, 1001=Absent, 1002=Late Arrival, 1003=Early Dismissal
                     $statusValue = null;
                     if (isset($record['status'])) {
                         // Direct status value provided
-                        $statusValue = (int)$record['status'];
+                        $statusValue = (int) $record['status'];
                         // Validate status value
                         if (!in_array($statusValue, [1000, 1001, 1002, 1003])) {
                             $errors[] = [
@@ -317,13 +320,13 @@ try {
                         }
                     } elseif (isset($record['present'])) {
                         // Legacy boolean format - convert to status
-                        $present = (bool)$record['present'];
+                        $present = (bool) $record['present'];
                         $statusValue = $present ? 1000 : 1001; // 1000 = Present, 1001 = Absent
                     } else {
                         // Default to Present if neither provided
                         $statusValue = 1000;
                     }
-                    
+
                     // Check if attendance record already exists
                     // Format date for Dataverse
                     $dateTime = $date . 'T00:00:00Z';
@@ -332,10 +335,10 @@ try {
                     $checkFilter = urlencode("{$ATTENDANCE_DATE_FIELD} ge {$dateTime} and {$ATTENDANCE_DATE_FIELD} le {$dateTimeEnd} and _{$ATTENDANCE_STUDENT_FIELD}_value eq {$studentId} and _{$ATTENDANCE_CLASS_FIELD}_value eq {$classId}");
                     $checkUrl = "{$DATAVERSE_URL}/api/data/v9.2/{$ATTENDANCE_TABLE}?\$filter={$checkFilter}";
                     $checkResult = makeDataverseRequest('GET', $checkUrl, $accessToken);
-                    
+
                     // Format date for Dataverse (ISO 8601 format)
                     $dateTimeValue = $date . 'T00:00:00Z';
-                    
+
                     // For lookup fields, MUST use @odata.bind (navigation properties)
                     // Navigation property names are CASE-SENSITIVE and differ from logical names
                     // From relationship metadata:
@@ -343,23 +346,23 @@ try {
                     // - Class: crd88_Classes (capital C) not crd88_classes
                     // Get remarks from record (if provided)
                     $remarksText = isset($record['remarks']) ? trim($record['remarks']) : '';
-                    
+
                     $attendanceData = [
                         $ATTENDANCE_DATE_FIELD => $dateTimeValue,
                         "{$ATTENDANCE_STUDENT_NAV}@odata.bind" => "/{$STUDENTS_TABLE}({$studentId})",
                         "{$ATTENDANCE_CLASS_NAV}@odata.bind" => "/{$CLASSES_TABLE}({$classId})",
                         $ATTENDANCE_PRESENT_FIELD => $statusValue
                     ];
-                    
+
                     // Add remarks field (always include to allow clearing)
                     $attendanceData[$ATTENDANCE_REMARKS_FIELD] = $remarksText;
-                    
+
                     // Note: crd88_createdby field doesn't exist in the attendance table
                     // If you need to track who created the record, add a custom field to the table first
                     // if ($createdBy) {
                     //     $attendanceData['crd88_createdby'] = $createdBy;
                     // }
-                    
+
                     if ($checkResult['status'] === 200) {
                         $existing = json_decode($checkResult['body'], true);
                         if (!empty($existing['value'])) {
@@ -367,7 +370,7 @@ try {
                             $existingId = $existing['value'][0][$ATTENDANCE_ID_FIELD];
                             $updateUrl = "{$DATAVERSE_URL}/api/data/v9.2/{$ATTENDANCE_TABLE}({$existingId})";
                             $updateResult = makeDataverseRequest('PATCH', $updateUrl, $accessToken, $attendanceData);
-                            
+
                             if ($updateResult['status'] === 204 || $updateResult['status'] === 200) {
                                 $results[] = ['studentId' => $studentId, 'action' => 'updated', 'id' => $existingId];
                             } else {
@@ -377,7 +380,7 @@ try {
                             // Create new record
                             $createUrl = "{$DATAVERSE_URL}/api/data/v9.2/{$ATTENDANCE_TABLE}";
                             $createResult = makeDataverseRequest('POST', $createUrl, $accessToken, $attendanceData);
-                            
+
                             if ($createResult['status'] === 201 || $createResult['status'] === 204) {
                                 $createdData = json_decode($createResult['body'], true);
                                 $results[] = ['studentId' => $studentId, 'action' => 'created', 'id' => $createdData[$ATTENDANCE_ID_FIELD] ?? 'new'];
@@ -389,7 +392,7 @@ try {
                         // Create new record
                         $createUrl = "{$DATAVERSE_URL}/api/data/v9.2/{$ATTENDANCE_TABLE}";
                         $createResult = makeDataverseRequest('POST', $createUrl, $accessToken, $attendanceData);
-                        
+
                         if ($createResult['status'] === 201 || $createResult['status'] === 204) {
                             $createdData = json_decode($createResult['body'], true);
                             $results[] = ['studentId' => $studentId, 'action' => 'created', 'id' => $createdData[$ATTENDANCE_ID_FIELD] ?? 'new'];
@@ -398,7 +401,7 @@ try {
                         }
                     }
                 }
-                
+
                 if (empty($errors)) {
                     echo json_encode([
                         'success' => true,
@@ -416,13 +419,66 @@ try {
                 }
             }
             break;
-            
+
+        case 'busList':
+            // GET /api/attendanceGateway.php?action=busList&date=2024-01-01 - Get all students with bus assignments and their attendance
+            $date = $queryParams['date'] ?? date('Y-m-d');
+
+            // 1. Get all students with bus assignments
+            $filterStudents = urlencode("{$STUDENT_BUS_FIELD} ne null");
+            $selectStudents = urlencode("{$STUDENT_ID_FIELD},{$STUDENT_NAME_FIELD},{$STUDENT_NUMBER_FIELD},{$STUDENT_BUS_FIELD}");
+            $studentsUrl = "{$DATAVERSE_URL}/api/data/v9.2/{$STUDENTS_TABLE}?\$filter={$filterStudents}&\$select={$selectStudents}";
+            $studentsResult = makeDataverseRequest('GET', $studentsUrl, $accessToken);
+
+            if ($studentsResult['status'] !== 200) {
+                http_response_code($studentsResult['status']);
+                echo json_encode(['error' => 'Failed to fetch students with bus assignments', 'details' => $studentsResult['body']]);
+                exit;
+            }
+
+            $studentsData = json_decode($studentsResult['body'], true);
+            $busStudents = $studentsData['value'] ?? [];
+
+            // 2. Get attendance for the selected date
+            $dateTime = $date . 'T00:00:00Z';
+            $dateTimeEnd = $date . 'T23:59:59Z';
+            $filterAttendance = urlencode("{$ATTENDANCE_DATE_FIELD} ge {$dateTime} and {$ATTENDANCE_DATE_FIELD} le {$dateTimeEnd}");
+            $selectAttendance = urlencode("{$ATTENDANCE_PRESENT_FIELD},_{$ATTENDANCE_STUDENT_FIELD}_value");
+            $attendanceUrl = "{$DATAVERSE_URL}/api/data/v9.2/{$ATTENDANCE_TABLE}?\$filter={$filterAttendance}&\$select={$selectAttendance}";
+            $attendanceResult = makeDataverseRequest('GET', $attendanceUrl, $accessToken);
+
+            $attendanceMap = [];
+            if ($attendanceResult['status'] === 200) {
+                $attendanceData = json_decode($attendanceResult['body'], true);
+                if (isset($attendanceData['value'])) {
+                    foreach ($attendanceData['value'] as $record) {
+                        $sId = $record["_{$ATTENDANCE_STUDENT_FIELD}_value"] ?? null;
+                        if ($sId) {
+                            $attendanceMap[$sId] = $record[$ATTENDANCE_PRESENT_FIELD] ?? 1000;
+                        }
+                    }
+                }
+            }
+
+            // 3. Merge data
+            foreach ($busStudents as &$student) {
+                $student['status'] = $attendanceMap[$student[$STUDENT_ID_FIELD]] ?? 1000; // Default to Present if no record
+            }
+            unset($student);
+
+            echo json_encode([
+                'success' => true,
+                'date' => $date,
+                'students' => $busStudents
+            ]);
+            break;
+
         default:
             http_response_code(400);
             echo json_encode(['error' => 'Invalid action. Use: classes, students, or attendance']);
             break;
     }
-    
+
 } catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
