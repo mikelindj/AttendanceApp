@@ -336,10 +336,10 @@ function Attendance() {
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // TEMPORARY: Allow local testing
-  const [isInTeams, setIsInTeams] = useState(true); // TEMPORARY: Allow local testing
-  const [userEmail, setUserEmail] = useState('test@acsacademy.edu.sg'); // TEMPORARY: Allow local testing
-  const [authChecked, setAuthChecked] = useState(true); // TEMPORARY: Allow local testing
+  const [isAuthenticated, setIsAuthenticated] = useState(false); // Start as false, require auth
+  const [isInTeams, setIsInTeams] = useState(false); // Check if running in Teams
+  const [userEmail, setUserEmail] = useState('');
+  const [authChecked, setAuthChecked] = useState(false); // Track if auth check is complete
   const [showDashboard, setShowDashboard] = useState(false); // Toggle between main view and dashboard
   const [showBusView, setShowBusView] = useState(false); // Toggle bus list view
   const [busListData, setBusListData] = useState([]);
@@ -560,12 +560,46 @@ function Attendance() {
 
   // Check if running in Teams and get user authentication
   const checkAuthentication = async () => {
-    // TEMPORARY: Skip authentication for local testing
-    setIsInTeams(true);
-    setIsAuthenticated(true);
-    setUserEmail('test@acsacademy.edu.sg');
-    setAuthChecked(true);
-    return;
+    try {
+      // First, check if we're running in Teams
+      if (!window.microsoftTeams) {
+        setIsInTeams(false);
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+        return;
+      }
+
+      // We're in Teams - mark as such
+      setIsInTeams(true);
+
+      // Get user context from Teams
+      let userPrincipalName = '';
+      try {
+        const context = await window.microsoftTeams.app.getContext();
+        userPrincipalName = context.user?.userPrincipalName || context.user?.loginHint || '';
+      } catch (err) {
+        console.error('Could not get Teams context:', err);
+        // If we can't get context, user might need to authenticate
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+        return;
+      }
+
+      // Require @acsacademy.edu.sg domain - strict check
+      if (userPrincipalName && userPrincipalName.toLowerCase().endsWith('@acsacademy.edu.sg')) {
+        setIsAuthenticated(true);
+        setUserEmail(userPrincipalName);
+      } else {
+        // User is not from required domain or not logged in
+        setIsAuthenticated(false);
+        setUserEmail(userPrincipalName || '');
+      }
+    } catch (err) {
+      console.error('Auth check error:', err);
+      setIsAuthenticated(false);
+    } finally {
+      setAuthChecked(true);
+    }
   };
 
 
