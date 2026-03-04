@@ -45,7 +45,7 @@ const DEFAULT_STATUS = 1000; // Present
 
 // Excluded student ID - excluded from all calculations
 // TEMPORARY: Commented out for testing - RE-ENABLE FOR PRODUCTION
-// const EXCLUDED_STUDENT_ID = 'c7891aae-6ad6-f011-8544-00224856f021';
+const EXCLUDED_STUDENT_ID = 'c7891aae-6ad6-f011-8544-00224856f021';
 
 const useStyles = makeStyles({
   container: {
@@ -613,13 +613,6 @@ function Attendance() {
 
   // Check if running in Teams and get user authentication
   const checkAuthentication = async () => {
-    // TEMPORARY: Authentication disabled for debugging
-    setIsInTeams(true);
-    setIsAuthenticated(true);
-    setAuthChecked(true);
-    setUserEmail('debug@acsacademy.edu.sg');
-    return;
-
     try {
       // First, check if we're running in Teams
       if (!window.microsoftTeams) {
