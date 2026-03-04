@@ -463,7 +463,8 @@ try {
 
             // 3. Merge data
             foreach ($busStudents as &$student) {
-                $student['status'] = $attendanceMap[$student[$STUDENT_ID_FIELD]] ?? 1000; // Default to Present if no record
+                // DO NOT default to 1000 (Present). If no record, set to null.
+                $student['status'] = $attendanceMap[$student[$STUDENT_ID_FIELD]] ?? null;
             }
             unset($student);
 

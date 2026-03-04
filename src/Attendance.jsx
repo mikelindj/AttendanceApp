@@ -399,7 +399,7 @@ function Attendance() {
               const attendanceData = await attendanceResponse.json();
               if (attendanceData.success && attendanceData.attendance) {
                 attendanceData.attendance.forEach(record => {
-                  attendanceMap[record.studentId] = record.crd88_status || 1000;
+                  attendanceMap[record.studentId] = record.crd88_status ?? null;
                 });
               }
             }
@@ -409,7 +409,7 @@ function Attendance() {
               // TEMPORARY: Exclude logic disabled for testing - RE-ENABLE FOR PRODUCTION
               // if (student.new_studentsid === EXCLUDED_STUDENT_ID) return;
 
-              const status = attendanceMap[student.new_studentsid] || 1000;
+              const status = attendanceMap[student.new_studentsid] ?? null;
               allStudents.push({
                 ...student,
                 className: getClassName(classItem),
@@ -487,10 +487,11 @@ function Attendance() {
     try {
       setIsSendingToTeams(true);
 
-      // Group students by bus (excluding absent students from groups)
+      // Group students by bus (only include present/late/early students)
       const buses = {};
       busListData.forEach(student => {
-        if (student.status === 1001) return; // Skip absent students for bus grouping
+        // Only include students explicitly marked as Present, Late, or Early
+        if (student.status !== 1000 && student.status !== 1002 && student.status !== 1003) return;
         const busNum = student.crd88_schoolbusassigned;
         if (!buses[busNum]) buses[busNum] = [];
         buses[busNum].push(student);
@@ -502,11 +503,18 @@ function Attendance() {
       // Format message with better layout and emojis
       const totalStudents = busListData.length;
       const absentCount = busListData.filter(s => s.status === 1001).length;
-      const presentCount = totalStudents - absentCount;
+      const presentCount = busListData.filter(s => s.status === 1000 || s.status === 1002 || s.status === 1003).length;
+      const unrecordedCount = busListData.filter(s => s.status === null).length;
 
       let message = `🚌 BUS LIST\n\n`;
       message += `# 📅 ${formatBusDate(busDate)}\n\n`;
-      message += `#### Summary: ${presentCount} Present / ${absentCount} Absent\n\n---\n\n`;
+
+      // Update summary to be more accurate if there are unrecorded students
+      if (unrecordedCount > 0) {
+        message += `#### Summary: ${presentCount} Present / ${absentCount} Absent / ${unrecordedCount} Not Recorded\n\n---\n\n`;
+      } else {
+        message += `#### Summary: ${presentCount} Present / ${absentCount} Absent\n\n---\n\n`;
+      }
 
       sortedBusNums.forEach(busNum => {
         message += `### 🚍 Bus ${busNum}\n`;
@@ -1170,7 +1178,9 @@ function Attendance() {
                   {dashboardData.students.length > 0 ? (
                     <div className={styles.dashboardStudentList}>
                       {dashboardData.students.map((student) => {
-                        const statusLabel = ATTENDANCE_STATUSES.find(s => s.value === student.status)?.label || 'Present';
+                        const statusLabel = student.status
+                          ? (ATTENDANCE_STATUSES.find(s => s.value === student.status)?.label || 'Present')
+                          : 'Not Recorded';
                         const isPresent = student.status === 1000;
                         const isAbsent = student.status === 1001;
 
@@ -1278,7 +1288,8 @@ function Attendance() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '24px' }}>
                   {Object.entries(
                     busListData.reduce((buses, student) => {
-                      if (student.status === 1001) return buses; // Skip absent students for groups
+                      // Only include students explicitly marked as Present, Late, or Early
+                      if (student.status !== 1000 && student.status !== 1002 && student.status !== 1003) return buses;
                       const busNum = student.crd88_schoolbusassigned;
                       if (!buses[busNum]) buses[busNum] = [];
                       buses[busNum].push(student);
